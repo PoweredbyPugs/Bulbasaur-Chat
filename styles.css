@@ -161,10 +161,56 @@
 }
 
 .stella-message-error .stella-message-content {
-    background: var(--background-modifier-error);
-    color: var(--text-error);
+    /* A light tint with normal text stays readable in light and dark themes */
+    background: color-mix(in srgb, var(--text-error) 12%, var(--background-primary));
+    color: var(--text-normal);
     border: 1px solid var(--text-error);
     max-width: 100%;
+}
+
+/* Reply to an unknown slash command */
+.stella-commands-banner {
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.stella-commands-banner-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.stella-commands-banner-head img {
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.stella-commands-banner-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-normal);
+}
+
+.stella-commands-banner-list {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 3px 12px;
+    font-size: 12px;
+}
+
+.stella-commands-banner-cmd {
+    font-family: var(--font-monospace);
+    color: var(--text-accent);
+}
+
+.stella-commands-banner-desc {
+    color: var(--text-muted);
 }
 
 .stella-message-temp {

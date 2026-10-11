@@ -38,6 +38,9 @@ import {
     describeProfileModel
 } from './src/views';
 
+// Bundled as a data URL so it reaches every device with main.js
+import commandsBannerImage from './bulbasaur-flowers.gif';
+
 // Import providers
 import {
     getProvider,
@@ -614,7 +617,7 @@ class StellaChatView extends ItemView {
                     return;
                 }
 
-                if (message === '/profile') {
+                if (message === '/profile' || message === '/profiles') {
                     this.showProfileSelector();
                     this.chatInput.value = '';
                     return;
@@ -717,7 +720,7 @@ class StellaChatView extends ItemView {
         }
 
         // Check for /profile command
-        if (message === '/profile') {
+        if (message === '/profile' || message === '/profiles') {
             this.showProfileSelector();
             this.chatInput.value = '';
             return;
@@ -754,8 +757,7 @@ class StellaChatView extends ItemView {
         // Check for any slash commands to prevent sending them as regular messages
         if (message.startsWith('/')) {
             this.logger.warn(`Unknown slash command detected: ${message}`);
-            const commandList = this.availableCommands.map(cmd => cmd.command).join(', ');
-            this.addMessage(`Unknown command: ${message}. Available commands: ${commandList}`, 'error');
+            this.showCommandsBanner();
             this.chatInput.value = '';
             return;
         }
@@ -3270,6 +3272,21 @@ class StellaChatView extends ItemView {
         }
 
         modal.open();
+    }
+
+    // Friendly reply to an unknown slash command. Shown in the chat only:
+    // not added to the history, so it is never saved or sent to the model.
+    showCommandsBanner() {
+        const messageEl = this.messagesContainer.createDiv({ cls: 'stella-message stella-commands-banner' });
+        const headEl = messageEl.createDiv({ cls: 'stella-commands-banner-head' });
+        headEl.createEl('img', { attr: { src: commandsBannerImage, alt: '' } });
+        headEl.createDiv({ cls: 'stella-commands-banner-title', text: 'These are the commands I know' });
+        const listEl = messageEl.createDiv({ cls: 'stella-commands-banner-list' });
+        this.availableCommands.forEach(cmd => {
+            listEl.createSpan({ cls: 'stella-commands-banner-cmd', text: cmd.command });
+            listEl.createSpan({ cls: 'stella-commands-banner-desc', text: cmd.description });
+        });
+        messageEl.scrollIntoView({ block: 'nearest' });
     }
 
     showHelpMessage() {
