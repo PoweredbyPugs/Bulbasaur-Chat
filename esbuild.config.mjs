@@ -11,14 +11,14 @@ if you want to view the source, please visit the github repository of this plugi
 `;
 
 const prod = (process.argv[2] === "production");
-const devDir = "../../KAI/.obsidian/plugins/Stella-dev";
+const devDir = "../../KAI/.obsidian/plugins/bulbasaur-chat-dev";
 
-// The repo manifest is the real plugin (id "stella"). The vault test copy
+// The repo manifest is the real plugin (id "bulbasaur-chat"). The vault test copy
 // gets its own id so both can be installed side by side.
 fs.mkdirSync(devDir, { recursive: true });
 const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
 fs.writeFileSync(`${devDir}/manifest.json`, JSON.stringify(
-	{ ...manifest, id: "stella-dev", name: "Stella (dev)" }, null, "\t") + "\n");
+	{ ...manifest, id: "bulbasaur-chat-dev", name: "Bulbasaur Chat (dev)" }, null, "\t") + "\n");
 fs.copyFileSync("styles.css", `${devDir}/styles.css`);
 
 const context = await esbuild.context({
@@ -27,7 +27,7 @@ const context = await esbuild.context({
 	},
 	entryPoints: ["main.ts"],
 	bundle: true,
-	loader: { ".gif": "dataurl" },
+	loader: { ".gif": "dataurl", ".jpg": "dataurl" },
 	external: [
 		"obsidian",
 		"electron",

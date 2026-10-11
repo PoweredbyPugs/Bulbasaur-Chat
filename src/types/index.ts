@@ -181,8 +181,8 @@ export const DEFAULT_SETTINGS: StellaSettings = {
     systemPromptsPath: '',
     mentalModelsPath: '',
     backgroundImage: '',
-    backgroundMode: 'centered',
-    backgroundOpacity: 0.5,
+    backgroundMode: 'fill',
+    backgroundOpacity: 0.05,
     loadingGif: '',
     autoHideHeader: false,
     quickAddCommands: [

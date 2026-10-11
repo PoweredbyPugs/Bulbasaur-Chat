@@ -17,7 +17,7 @@ const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 // dashboard and activity log.
 const ATTRIBUTION_HEADERS = {
     'HTTP-Referer': 'https://github.com/PoweredbyPugs/Stella-Obsidian-Chat',
-    'X-Title': 'Stella',
+    'X-Title': 'Bulbasaur Chat',
 };
 
 /** List every model id OpenRouter offers, alphabetically. No key needed. */

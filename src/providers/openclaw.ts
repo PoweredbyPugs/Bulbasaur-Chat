@@ -105,7 +105,7 @@ export class OpenClawProvider implements LLMProvider {
                 maxProtocol: 3,
                 client: {
                     id: 'gateway-client',
-                    displayName: 'Stella (Obsidian)',
+                    displayName: 'Bulbasaur Chat (Obsidian)',
                     version: '0.2.0',
                     platform: navigator?.platform || 'linux',
                     mode: 'backend',

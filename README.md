@@ -1,4 +1,4 @@
-# Stella
+# Bulbasaur Chat
 
 An AI chat plugin for [Obsidian](https://obsidian.md) with multi-provider LLM support, MCP integration, and deep vault context.
 
@@ -27,7 +27,7 @@ All providers support streaming responses and real-time model fetching.
 
 ### MCP (Model Context Protocol) Integration
 
-Connect to MCP servers to extend what Stella can do:
+Connect to MCP servers to extend what Bulbasaur Chat can do:
 
 - Browse and connect to MCP servers via `/mcp`
 - Execute tools, load prompts, and browse resources
@@ -36,7 +36,7 @@ Connect to MCP servers to extend what Stella can do:
 
 ### Vault Integration
 
-Your notes are first-class citizens in Stella conversations:
+Your notes are first-class citizens in Bulbasaur Chat conversations:
 
 - **`@` mentions** — Type `@` in the input to search and attach notes as context
 - **`[[Wiki links]]`** — Click to add as context, Ctrl+click to open the note
@@ -85,31 +85,31 @@ Both can be active simultaneously. The system prompt shapes *who* the LLM is; th
 
 ### Manual Install
 
-1. Download the [latest release](https://github.com/poweredbypugs/Stella/releases)
+1. Download the [latest release](https://github.com/PoweredbyPugs/Bulbasaur-Chat/releases)
 2. Extract `main.js`, `manifest.json`, and `styles.css` into your vault at:
    ```
-   .obsidian/plugins/Stella/
+   .obsidian/plugins/bulbasaur-chat/
    ```
 3. Restart Obsidian
-4. Enable **Stella** in Settings → Community Plugins
+4. Enable **Bulbasaur Chat** in Settings → Community Plugins
 
 ### From Source
 
 ```bash
 cd /path/to/vault/.obsidian/plugins
-git clone https://github.com/poweredbypugs/Stella.git
-cd Stella
+git clone https://github.com/PoweredbyPugs/Bulbasaur-Chat.git
+cd Bulbasaur-Chat
 ```
 
 ---
 
 ## Getting Started
 
-1. Open **Settings → Stella**
+1. Open **Settings → Bulbasaur Chat**
 2. Select your LLM provider
 3. Enter your API key (not needed for local providers)
 4. (Optional) Configure paths for system prompts and mental models folders
-5. Open Stella from the ribbon icon or the command palette: **Open Stella Chat**
+5. Open Bulbasaur Chat from the ribbon icon or the command palette: **Open Bulbasaur Chat Chat**
 
 ---
 
@@ -205,12 +205,12 @@ All commands are typed directly into the chat input. Type `/help` to see the ful
 
 ## How It Works
 
-Stella runs as an Obsidian sidebar view. When you send a message, it:
+Bulbasaur Chat runs as an Obsidian sidebar view. When you send a message, it:
 
 1. Composes a system message from your active system prompt + mental model + attached note context
 2. Sends the full conversation to your selected LLM provider
 3. Streams the response back with real-time markdown rendering
-4. If MCP tools are available and the LLM invokes one, Stella executes the tool call and feeds the result back
+4. If MCP tools are available and the LLM invokes one, Bulbasaur Chat executes the tool call and feeds the result back
 
 All conversation data is stored locally in the plugin's `data.json` file within your vault. API keys are stored in Obsidian's plugin settings — nothing is sent anywhere except to the LLM provider you configure.
 
@@ -218,21 +218,21 @@ All conversation data is stored locally in the plugin's `data.json` file within 
 
 ## Development
 
-Stella is developed in a separate `Stella-dev/` folder and deployed to this production folder.
+Bulbasaur Chat is developed in a `bulbasaur-chat/` source folder and deployed into the vault's plugin folder.
 
 ### Building from Source
 
 ```bash
-cd Stella-dev
+cd bulbasaur-chat
 npm install
 npm run build      # TypeScript check + esbuild bundle
-npm run deploy     # Build + copy main.js to Stella/
+npm run deploy     # Build + copy main.js to the vault plugin folder
 ```
 
 ### Project Structure (Development)
 
 ```
-Stella-dev/
+bulbasaur-chat/
 ├── main.ts                  # Plugin entry point
 ├── src/
 │   ├── types/               # TypeScript interfaces
@@ -247,7 +247,7 @@ Stella-dev/
 
 ### Provider Architecture
 
-Stella uses a factory pattern for LLM providers. Each provider implements a common interface, and `getProvider()` returns the appropriate implementation based on settings. All providers receive a unified `ProviderContext` containing the system message, conversation history, and streaming callbacks.
+Bulbasaur Chat uses a factory pattern for LLM providers. Each provider implements a common interface, and `getProvider()` returns the appropriate implementation based on settings. All providers receive a unified `ProviderContext` containing the system message, conversation history, and streaming callbacks.
 
 ---
 

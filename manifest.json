@@ -1,7 +1,7 @@
 {
-  "id": "stella",
-  "name": "Stella",
-  "version": "1.2.0",
+  "id": "bulbasaur-chat",
+  "name": "Bulbasaur Chat",
+  "version": "1.3.0",
   "minAppVersion": "0.15.0",
   "description": "Advanced AI chat with LLM integration, semantic search, and MCP support",
   "author": "poweredbypugs",

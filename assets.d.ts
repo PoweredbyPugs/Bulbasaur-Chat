@@ -3,3 +3,7 @@ declare module '*.gif' {
     const dataUrl: string;
     export default dataUrl;
 }
+declare module '*.jpg' {
+    const dataUrl: string;
+    export default dataUrl;
+}

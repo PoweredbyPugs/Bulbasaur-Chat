@@ -49,7 +49,7 @@ export function hermesApiBase(settings: StellaSettings, agent?: string): string 
 
 function explainHttpError(status: number, body: any): Error {
     if (status === 401) {
-        return new Error('Hermes rejected the API key. Copy API_SERVER_KEY from ~/.hermes/.env on the Hermes machine into Stella\'s settings.');
+        return new Error('Hermes rejected the API key. Copy API_SERVER_KEY from ~/.hermes/.env on the Hermes machine into Bulbasaur Chat\'s settings.');
     }
     const detail = body?.error?.message || (typeof body?.error === 'string' ? body.error : '') || (typeof body === 'string' ? body : JSON.stringify(body));
     return new Error(`Hermes error (${status}): ${detail}`);

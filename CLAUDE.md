@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Stella is an Obsidian plugin providing an AI chat interface with multi-provider LLM support, note context integration, and MCP (Model Context Protocol) integration. The project has completed a major refactoring from a monolithic architecture to a modular structure.
+Bulbasaur Chat (formerly Stella; renamed 2026-10-11) is an Obsidian plugin providing an AI chat interface with multi-provider LLM support, note context integration, and MCP (Model Context Protocol) integration. The project has completed a major refactoring from a monolithic architecture to a modular structure.
 
 ## Build Commands
 
@@ -15,7 +15,7 @@ npm run dev
 # Production build (TypeScript check + bundle)
 npm run build
 
-# Deploy to production folder (build + copy to Stella/)
+# Deploy to production folder (build + copy to the vault's bulbasaur-chat/)
 npm run deploy
 
 # Version bump (updates manifest.json and versions.json)
@@ -25,14 +25,14 @@ npm run version
 ## Development Workflow
 
 ### Folder Structure
-- **Stella-dev/** (vault) - Test copy (plugin ID: `stella-dev`, name "Stella (dev)"). Every build writes `main.js` here, plus a `manifest.json` derived from the repo's with the id/name swapped, plus `styles.css`.
-- **Stella/** (vault) - Live copy (plugin ID: `stella`), synced to other devices via Obsidian Sync. Only `npm run deploy` writes here (`main.js`, `manifest.json`, `styles.css`). Never hand-edit it.
+- **bulbasaur-chat-dev/** (vault) - Test copy (plugin ID: `bulbasaur-chat-dev`, name "Bulbasaur Chat (dev)"). Every build writes `main.js` here, plus a `manifest.json` derived from the repo's with the id/name swapped, plus `styles.css`.
+- **bulbasaur-chat/** (vault) - Live copy (plugin ID: `bulbasaur-chat`), synced to other devices via Obsidian Sync. Only `npm run deploy` writes here (`main.js`, `manifest.json`, `styles.css`). Never hand-edit it.
 
-Both folders can coexist in Obsidian. Changes are developed in Stella-dev and deployed to Stella using `npm run deploy`.
+Both folders can coexist in Obsidian. Source lives in `~/Documents/Plugin Project/bulbasaur-chat/`; changes are built into bulbasaur-chat-dev and deployed to bulbasaur-chat using `npm run deploy`.
 
 ### Testing Changes
 1. Use `npm run dev` for development with auto-rebuild
-2. Reload the plugin in Obsidian developer tools (Ctrl+Shift+I → Console → `app.plugins.disablePlugin('stella-dev'); app.plugins.enablePlugin('stella-dev')`)
+2. Reload the plugin in Obsidian developer tools (Ctrl+Shift+I → Console → `app.plugins.disablePlugin('bulbasaur-chat-dev'); app.plugins.enablePlugin('bulbasaur-chat-dev')`)
 3. When ready for production: `npm run deploy`
 
 ## Current Status: ✅ MODULAR REFACTORING COMPLETE
@@ -67,7 +67,7 @@ Both folders can coexist in Obsidian. Changes are developed in Stella-dev and de
 ### Modular File Structure
 
 ```
-Stella-dev/
+bulbasaur-chat/
 ├── main.ts                    # Main plugin entry (~5,400 lines, down from 7,455)
 ├── src/
 │   ├── types/                 # TypeScript interfaces
@@ -107,7 +107,7 @@ Stella-dev/
 │           └── note-selector.ts
 │
 ├── styles.css                 # Plugin styles
-├── manifest.json              # Plugin manifest (ID: stella — the real plugin)
+├── manifest.json              # Plugin manifest (ID: bulbasaur-chat — the real plugin)
 ├── package.json               # Dependencies & scripts
 ├── esbuild.config.mjs         # Build configuration
 └── CLAUDE.md                  # This file
@@ -237,6 +237,12 @@ const response = await provider.chat(context);
 | Hermes | Hermes Agent (gateway API server, port 8642, `API_SERVER_KEY`) | Yes | Agent's own tools |
 
 **Hermes:** use the gateway's OpenAI-compatible API server, never the 9119 dashboard — the dashboard's WebSocket enforces Host, per-launch token and Origin checks that an outside app can't pass. `requestUrl` sidesteps the API server's CORS allowlist at the cost of streaming.
+
+## Naming
+
+The plugin was renamed from Stella to Bulbasaur Chat (id `bulbasaur-chat`) on 2026-10-11. Internal names were kept on purpose: the classes (`StellaPlugin`, `StellaChatView`, `StellaSettingTab`), the view type `stella-mcp-chat-view` (saved layouts depend on it), the `stella-*` CSS classes (themes target them) and the `stella_cache_` localStorage prefix. Don't rename these.
+
+The loading gif (`bulbasaur.gif`), default background (`bulbasaur-background.jpg`) and commands banner (`bulbasaur-flowers.gif`) are bundled into `main.js` as data URLs via the esbuild loader, so they need no files in the plugin folder.
 
 ## Profiles
 

@@ -1,4 +1,4 @@
-# Stella - Obsidian AI Chat Plugin
+# Bulbasaur Chat - Obsidian AI Chat Plugin
 
 **Version:** 0.1.1
 **Author:** PoweredbyPugs
@@ -6,13 +6,13 @@
 
 ## Overview
 
-Stella is an advanced AI chat plugin for Obsidian that provides seamless LLM integration with support for multiple providers, MCP (Model Context Protocol) servers, and deep integration with your Obsidian vault.
+Bulbasaur Chat is an advanced AI chat plugin for Obsidian that provides seamless LLM integration with support for multiple providers, MCP (Model Context Protocol) servers, and deep integration with your Obsidian vault.
 
 ## Features
 
 ### Multi-Provider LLM Support
 
-Stella supports multiple AI providers out of the box:
+Bulbasaur Chat supports multiple AI providers out of the box:
 
 - **Anthropic** (Claude models) - Default provider
 - **OpenAI** (GPT models)
@@ -157,7 +157,7 @@ StellaPlugin (main.ts)
 
 | Command | Description |
 |---------|-------------|
-| Open Stella Chat | Opens the chat view in the sidebar |
+| Open Bulbasaur Chat Chat | Opens the chat view in the sidebar |
 | `/name` | Rename current conversation |
 | `/new` | Start a new conversation |
 | `/del` | Delete current conversation |
@@ -184,7 +184,7 @@ The plugin is bundled using **esbuild**. The `main.js` file is a generated bundl
 ### Source Structure
 
 ```
-Stella/
+bulbasaur-chat/
 ├── main.js          # Bundled plugin code
 ├── manifest.json    # Plugin manifest
 ├── styles.css       # Plugin styles
@@ -236,4 +236,4 @@ See repository for license information.
 
 ---
 
-*Generated for Stella v0.1.1*
+*Generated for Bulbasaur Chat v0.1.1*

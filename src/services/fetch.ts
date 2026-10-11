@@ -12,7 +12,7 @@ export class FetchManager {
         }
 
         // User agent for better API compatibility
-        headers.set('User-Agent', 'Stella-Obsidian-Plugin/1.0');
+        headers.set('User-Agent', 'Bulbasaur-Chat-Obsidian-Plugin/1.0');
 
         const enhancedOptions: RequestInit = {
             ...options,

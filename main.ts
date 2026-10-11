@@ -40,6 +40,8 @@ import {
 
 // Bundled as a data URL so it reaches every device with main.js
 import commandsBannerImage from './bulbasaur-flowers.gif';
+import defaultLoadingGif from './bulbasaur.gif';
+import defaultBackgroundImage from './bulbasaur-background.jpg';
 
 // Import providers
 import {
@@ -116,14 +118,14 @@ export default class StellaPlugin extends Plugin {
         );
 
         // Add ribbon icon to open chat
-        this.addRibbonIcon('message-circle', 'Open Stella Chat', () => {
+        this.addRibbonIcon('message-circle', 'Open Bulbasaur Chat', () => {
             this.activateView();
         });
 
         // Add command to open chat
         this.addCommand({
-            id: 'open-stella-chat',
-            name: 'Open Stella Chat',
+            id: 'open-chat',
+            name: 'Open Bulbasaur Chat',
             callback: () => {
                 this.activateView();
             }
@@ -146,7 +148,7 @@ export default class StellaPlugin extends Plugin {
                 if (!selection || !selection.trim()) return;
                 menu.addItem((item) => {
                     item
-                        .setTitle('Send selection to new Stella chat')
+                        .setTitle('Send selection to new Bulbasaur Chat')
                         .setIcon('message-circle')
                         .onClick(async () => {
                             await this.sendSelectionToNewChat(selection);
@@ -197,8 +199,8 @@ export default class StellaPlugin extends Plugin {
         // Add safety check for missing background settings (backward compatibility)
         if (typeof this.settings.backgroundImage === 'undefined') {
             this.settings.backgroundImage = '';
-            this.settings.backgroundMode = 'centered';
-            this.settings.backgroundOpacity = 0.5;
+            this.settings.backgroundMode = 'fill';
+            this.settings.backgroundOpacity = 0.05;
         }
 
         // Hermes moved from the dashboard WebSocket (port 9119) to the
@@ -351,14 +353,14 @@ export default class StellaPlugin extends Plugin {
             leaves = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
         }
         if (leaves.length === 0) {
-            new Notice('Could not open Stella chat view.');
+            new Notice('Could not open the Bulbasaur Chat view.');
             return;
         }
         this.app.workspace.revealLeaf(leaves[0]);
 
         const chatView = leaves[0].view as StellaChatView;
         if (!chatView || typeof chatView.startNewConversation !== 'function') {
-            new Notice('Stella chat view is not ready yet — try again in a moment.');
+            new Notice('Bulbasaur Chat is not ready yet — try again in a moment.');
             return;
         }
         chatView.startNewConversation();
@@ -450,7 +452,7 @@ class StellaChatView extends ItemView {
     }
 
     getDisplayText() {
-        return "Stella";
+        return "Bulbasaur Chat";
     }
 
     async onOpen() {
@@ -929,27 +931,8 @@ class StellaChatView extends ItemView {
             }
         }
 
-        // Try to load default bulbasaur.gif from plugin directory using Node.js fs
-        try {
-            const adapter = this.app.vault.adapter as any;
-            if (adapter.getBasePath) {
-                const basePath = adapter.getBasePath();
-                const path = require('path');
-                const fs = require('fs');
-                const gifPath = path.join(basePath, '.obsidian', 'plugins', 'Stella', 'bulbasaur.gif');
-                if (fs.existsSync(gifPath)) {
-                    const data = fs.readFileSync(gifPath);
-                    const base64 = data.toString('base64');
-                    imgElement.src = `data:image/gif;base64,${base64}`;
-                    return;
-                }
-            }
-        } catch (error) {
-            console.warn('Failed to load default GIF from plugin directory:', error);
-        }
-
-        // Final fallback: CSS-based loading animation
-        this.createCSSLoadingAnimation(imgElement);
+        // Default: the Bulbasaur gif bundled with the plugin
+        imgElement.src = defaultLoadingGif;
     }
 
     createCSSLoadingAnimation(imgElement: HTMLImageElement) {
@@ -4694,27 +4677,15 @@ class StellaChatView extends ItemView {
         const { backgroundImage, backgroundMode, backgroundOpacity } = this.plugin.settings;
         console.log('Background settings:', { backgroundImage, backgroundMode, backgroundOpacity });
 
-        if (!backgroundImage) {
-            console.log('No background image set, clearing styles');
-            // Remove background image by clearing CSS custom properties
-            this.chatContainer.style.setProperty('--bg-image', 'none');
-            this.chatContainer.style.setProperty('--bg-size', 'auto');
-            this.chatContainer.style.setProperty('--bg-opacity', '1');
-            return;
-        }
-
         try {
-            // Handle both URLs and local file paths
-            let imageUrl = backgroundImage;
+            // No image chosen: the Bulbasaur background bundled with the plugin
+            let imageUrl = backgroundImage || defaultBackgroundImage;
 
             // Check if it's a local file path (Windows or Unix style)
-            const isLocalPath = !backgroundImage.startsWith('http') &&
+            const isLocalPath = !!backgroundImage && !backgroundImage.startsWith('http') &&
                                (backgroundImage.includes('\\') || backgroundImage.startsWith('/') || /^[A-Za-z]:/.test(backgroundImage));
 
-            console.log('isLocalPath:', isLocalPath);
-
             if (isLocalPath) {
-                // Use base64 method as primary approach for local files
                 try {
                     // Convert to data URL using file reading
                     const fs = require('fs');
@@ -4726,26 +4697,15 @@ class StellaChatView extends ItemView {
                                    fileExt === 'jpg' || fileExt === 'jpeg' ? 'image/jpeg' :
                                    fileExt === 'gif' ? 'image/gif' : 'image/*';
                     imageUrl = `data:${mimeType};base64,${base64}`;
-                    console.log('Using base64 data URL for local file (size: ~' + Math.round(base64.length / 1024) + 'KB)');
                 } catch (fsError) {
-                    console.log('Failed to read file as base64:', fsError);
-
-                    // Fallback: Try using Obsidian's resource path
-                    try {
-                        const adapter = this.app.vault.adapter as any;
-                        if (adapter && adapter.getResourcePath) {
-                            const cleanPath = backgroundImage.replace(/\\/g, '/');
-                            imageUrl = adapter.getResourcePath(cleanPath);
-                            console.log('Fallback: Using Obsidian resource path:', imageUrl);
-                        } else {
-                            // Final fallback: direct path
-                            imageUrl = backgroundImage.replace(/\\/g, '/');
-                            console.log('Final fallback: Using direct path:', imageUrl);
-                        }
-                    } catch (e2) {
-                        console.log('All methods failed:', e2);
-                        imageUrl = backgroundImage.replace(/\\/g, '/');
-                    }
+                    // Not readable from disk on this device (another machine's
+                    // path, or mobile): use a vault file of that path if there
+                    // is one, otherwise the bundled background.
+                    const vaultFile = this.app.vault.getAbstractFileByPath(
+                        backgroundImage.replace(/\\/g, '/').replace(/^\/+/, ''));
+                    imageUrl = vaultFile instanceof TFile
+                        ? this.app.vault.getResourcePath(vaultFile)
+                        : defaultBackgroundImage;
                 }
             }
 
@@ -5982,7 +5942,7 @@ class StellaSettingTab extends PluginSettingTab {
             modal.titleEl.setText('Available QuickAdd Commands');
 
             const content = modal.contentEl;
-            content.createEl('p', { text: 'Copy the Command ID to use in Stella settings:' });
+            content.createEl('p', { text: 'Copy the Command ID to use in Bulbasaur Chat settings:' });
 
             const container = content.createDiv('quickadd-commands-list');
 
