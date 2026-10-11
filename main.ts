@@ -3525,7 +3525,14 @@ class StellaChatView extends ItemView {
                             provider === 'openclaw' ? 'openclaw' :
                             provider === 'hermes' ? 'hermes' : 'custom';
 
-        if (!model || model.trim() === '') {
+        if (provider === 'hermes') {
+            // Show the agent by its short name: a named agent is its own
+            // name; the default agent takes the name of its saved profile.
+            const named = isNamedHermesAgent(model);
+            const profile = this.plugin.settings.profiles.find(p =>
+                p.provider === 'hermes' && !isNamedHermesAgent(p.model));
+            container.textContent = `hermes: ${named ? model : (profile?.name || 'default agent')}`;
+        } else if (!model || model.trim() === '') {
             container.textContent = `${providerName}: no model selected`;
         } else {
             container.textContent = `${providerName}: ${model}`;
