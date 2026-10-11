@@ -102,7 +102,14 @@ export interface StellaSettings {
     // 9119 dashboard). hermesApiKey is the gateway's API_SERVER_KEY.
     hermesUrl: string;
     hermesApiKey: string;
+    // For Hermes, `model` holds the agent name ('' or 'hermes-agent' = the
+    // gateway's default agent; anything else is a named agent profile).
     model: string;
+    // Model last used with each provider, restored when switching back.
+    lastModels: Record<string, string>;
+    // Saved model profiles (see ModelProfile) and the one in use, if any.
+    profiles: ModelProfile[];
+    activeProfileId: string | null;
     maxTokens: number;
     temperature: number;
     conversations: Conversation[];
@@ -120,6 +127,18 @@ export interface StellaSettings {
     mcpEnabled: boolean;
     mcpServers: MCPServer[];
     mcpAutoDiscovery: boolean;
+}
+
+// A named, saved model choice. Its optional prompt (a vault note or typed
+// text) travels with the profile and is sent ahead of the chat's own
+// context; it is never shown in or saved to a conversation.
+export interface ModelProfile {
+    id: string;
+    name: string;
+    provider: string;
+    model: string;
+    promptFile?: string;
+    promptText?: string;
 }
 
 export interface QuickAddCommand {
@@ -152,6 +171,9 @@ export const DEFAULT_SETTINGS: StellaSettings = {
     hermesUrl: 'http://127.0.0.1:8642',
     hermesApiKey: '',
     model: '',
+    lastModels: {},
+    profiles: [],
+    activeProfileId: null,
     maxTokens: 4000,
     temperature: 0.7,
     conversations: [],

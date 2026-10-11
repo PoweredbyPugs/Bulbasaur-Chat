@@ -425,6 +425,100 @@
     font-size: 14px;
 }
 
+/* Profile selector (/profile) */
+.stella-profile-modal .modal-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.stella-profiles-list {
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.stella-profile-item {
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--background-modifier-border);
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    background: var(--background-primary);
+}
+
+.stella-profile-item:hover {
+    background: var(--interactive-hover);
+    border-color: var(--interactive-accent);
+}
+
+.stella-profile-item.is-active {
+    border-color: var(--interactive-accent);
+}
+
+.stella-profile-item.selected {
+    background: var(--interactive-accent);
+    border-color: var(--interactive-accent);
+}
+
+.stella-profile-name {
+    font-weight: 500;
+    color: var(--text-normal);
+    font-size: 14px;
+}
+
+.stella-profile-sub {
+    color: var(--text-muted);
+    font-size: 11px;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stella-profile-item.selected .stella-profile-name,
+.stella-profile-item.selected .stella-profile-sub {
+    color: var(--text-on-accent);
+}
+
+.stella-profile-empty {
+    color: var(--text-muted);
+    font-size: 13px;
+    text-align: center;
+    padding: 12px 0;
+}
+
+button.stella-profile-add {
+    align-self: center;
+    width: 32px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0;
+    margin: 8px auto 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--interactive-accent);
+    color: #fff;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: none;
+}
+
+button.stella-profile-add:hover {
+    background: var(--interactive-accent-hover);
+}
+
+/* Profiles in the settings tab */
+.stella-profile-settings textarea {
+    width: 100%;
+    min-height: 60px;
+    resize: vertical;
+}
+
 /* System prompt indicator in input area */
 .stella-system-prompt-indicator {
     position: absolute;

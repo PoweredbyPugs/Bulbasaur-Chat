@@ -161,7 +161,7 @@ Empty/unnamed conversations are automatically cleaned up:
 
 ### ✅ Advanced Features
 - **System Prompts**: `/sys` command opens file browser for .md system prompts
-- **Mental Models**: `/model` command opens file browser for .md mental model files. Mental models are injected into the system message with a labeled header (`## Active Mental Model: <name>`) and an explicit instruction telling the LLM to actively apply it as a reasoning lens, distinct from the system prompt identity/persona.
+- **Mental Models**: `/mental` command opens file browser for .md mental model files. Mental models are injected into the system message with a labeled header (`## Active Mental Model: <name>`) and an explicit instruction telling the LLM to actively apply it as a reasoning lens, distinct from the system prompt identity/persona.
 - **Wiki Link Resolution**: `[[Note Name]]` automatically becomes clickable links
 - **Note Context**: "@" symbol opens quick switcher to add vault notes as context
 - **MCP Integration**: Full MCP client with tool execution via `/mcp` command
@@ -181,8 +181,10 @@ All commands are accessible via the chat input. Type `/help` to see this list in
 - **`/help`** - Show all available commands
 - **`/sys`** - Load system prompt from file
 - **`/sysclear`** - Clear current system prompt
-- **`/model`** - Load mental model from file
-- **`/modelclear`** - Clear current mental model
+- **`/mental`** - Load mental model from file
+- **`/mentalclear`** - Clear current mental model
+- **`/profile`** - Switch model profile (picker of saved profiles)
+- **`/model`** - Show current model and profile
 - **`/mcp`** - Connect to MCP server
 - **`/mcpclear`** - Clear MCP connections
 - **`/clear`** - Clear all context and start new conversation
@@ -235,6 +237,15 @@ const response = await provider.chat(context);
 | Hermes | Hermes Agent (gateway API server, port 8642, `API_SERVER_KEY`) | Yes | Agent's own tools |
 
 **Hermes:** use the gateway's OpenAI-compatible API server, never the 9119 dashboard — the dashboard's WebSocket enforces Host, per-launch token and Origin checks that an outside app can't pass. `requestUrl` sidesteps the API server's CORS allowlist at the cost of streaming.
+
+## Profiles
+
+A profile (`ModelProfile` in `src/types/index.ts`, stored in `settings.profiles`) is a saved provider + model + name, with an optional prompt (`promptFile` vault note and/or `promptText`). `settings.activeProfileId` marks the one in use; `settings.lastModels` remembers the last model per provider.
+
+- **All provider/model changes go through `StellaPlugin.applyModelSelection(provider, model, profileId?)`.** Picking a profile passes its id; any other change clears the active profile.
+- **The profile prompt is a hidden layer.** `refreshActiveProfilePrompt()` resolves it before each request and `buildSystemMessage()` puts it first. It is never written to a conversation and has no indicator; a chat's own `/sys`, `/mental` and notes are separate and stay with the chat.
+- **Hermes agents:** for Hermes, `settings.model` is the agent name. `hermes-agent` (or empty) is the gateway's default agent at `/v1`; any other name is served at `/p/<name>/v1` (`hermesApiBase`). The settings tab shows an Agent box instead of the model dropdown.
+- `/profile` opens `ProfileSelectorModal` (`src/views/modals/profile-selector.ts`); its plus button opens settings at the Profiles heading. Profiles are created in the settings tab (`renderProfileSettings`).
 
 ## MCP Integration
 

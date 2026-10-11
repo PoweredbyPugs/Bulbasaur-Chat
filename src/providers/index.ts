@@ -9,7 +9,7 @@ export { OllamaProvider } from './ollama';
 export { LMStudioProvider } from './lmstudio';
 export { CustomAPIProvider } from './custom';
 export { OpenClawProvider } from './openclaw';
-export { HermesProvider, HERMES_FALLBACK_MODEL, listHermesModels } from './hermes';
+export { HermesProvider, HERMES_FALLBACK_MODEL, listHermesModels, isNamedHermesAgent } from './hermes';
 export { OpenRouterProvider, listOpenRouterModels } from './openrouter';
 
 // Import for factory

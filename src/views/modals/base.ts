@@ -71,9 +71,11 @@ export abstract class StellaModal extends Modal {
         options?: {
             onPreview?: (index: number) => void;
             onEscape?: () => void;
+            initialIndex?: number;
         }
     ): void {
-        let selectedIndex = 0;
+        const initial = options?.initialIndex ?? 0;
+        let selectedIndex = initial >= 0 && initial < items.length ? initial : 0;
 
         const updateSelection = (newIndex: number) => {
             if (newIndex < 0 || newIndex >= items.length) return;
@@ -86,7 +88,7 @@ export abstract class StellaModal extends Modal {
 
         // Set initial selection
         if (items.length > 0) {
-            items[0].classList.add('selected');
+            items[selectedIndex].classList.add('selected');
         }
 
         this.modalEl.addEventListener('keydown', (e: KeyboardEvent) => {

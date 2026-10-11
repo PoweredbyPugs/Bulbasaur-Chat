@@ -24,14 +24,26 @@ import { LLMProvider, ProviderContext, StreamCallbacks } from './types';
 // Model id Hermes' /v1/models reports; used when the list can't be fetched.
 export const HERMES_FALLBACK_MODEL = 'hermes-agent';
 
-/** Normalize the settings URL to the API base, e.g. http://host:8642/v1 */
-export function hermesApiBase(settings: StellaSettings): string {
+/** True when `agent` names something other than the gateway's default agent. */
+export function isNamedHermesAgent(agent?: string): boolean {
+    const name = (agent || '').trim();
+    return !!name && name !== HERMES_FALLBACK_MODEL;
+}
+
+/**
+ * Normalize the settings URL to the API base, e.g. http://host:8642/v1.
+ * A named agent is served under its own prefix: http://host:8642/p/<agent>/v1
+ */
+export function hermesApiBase(settings: StellaSettings, agent?: string): string {
     let url = (settings.hermesUrl || '').trim();
     if (!url) throw new Error('Hermes API URL is not set');
     if (!/^[a-z]+:\/\//i.test(url)) url = 'http://' + url;
     url = url.replace(/\/+$/, '');
     // Accept a bare host:port, a /v1 base, or a full endpoint URL.
     url = url.replace(/\/v1(\/.*)?$/, '');
+    // The agent is chosen per request; drop one typed into the URL.
+    url = url.replace(/\/p\/[^/]+$/, '');
+    if (isNamedHermesAgent(agent)) url += '/p/' + encodeURIComponent((agent as string).trim());
     return url + '/v1';
 }
 
@@ -39,12 +51,12 @@ function explainHttpError(status: number, body: any): Error {
     if (status === 401) {
         return new Error('Hermes rejected the API key. Copy API_SERVER_KEY from ~/.hermes/.env on the Hermes machine into Stella\'s settings.');
     }
-    const detail = body?.error?.message || (typeof body === 'string' ? body : JSON.stringify(body));
+    const detail = body?.error?.message || (typeof body?.error === 'string' ? body.error : '') || (typeof body === 'string' ? body : JSON.stringify(body));
     return new Error(`Hermes error (${status}): ${detail}`);
 }
 
-async function hermesRequest(settings: StellaSettings, path: string, init: { method?: string; body?: string } = {}): Promise<any> {
-    const url = hermesApiBase(settings) + path;
+async function hermesRequest(settings: StellaSettings, path: string, init: { method?: string; body?: string; agent?: string } = {}): Promise<any> {
+    const url = hermesApiBase(settings, init.agent) + path;
     let response;
     try {
         response = await requestUrl({
@@ -72,10 +84,10 @@ async function hermesRequest(settings: StellaSettings, path: string, init: { met
     return body;
 }
 
-/** Model ids the Hermes API server advertises (normally just one). */
-export async function listHermesModels(settings: StellaSettings): Promise<string[]> {
+/** Model ids the Hermes API server advertises for an agent (normally just one). */
+export async function listHermesModels(settings: StellaSettings, agent?: string): Promise<string[]> {
     if (!settings.hermesUrl || !settings.hermesApiKey) return [];
-    const body = await hermesRequest(settings, '/models');
+    const body = await hermesRequest(settings, '/models', { agent });
     return (body?.data || [])
         .map((m: any) => m?.id)
         .filter((id: any) => typeof id === 'string' && id.length > 0);
@@ -95,6 +107,7 @@ export class HermesProvider implements LLMProvider {
         // conversation (including the system message) every turn.
         const body = await hermesRequest(settings, '/chat/completions', {
             method: 'POST',
+            agent: settings.model,
             body: JSON.stringify({
                 model: settings.model || HERMES_FALLBACK_MODEL,
                 messages,

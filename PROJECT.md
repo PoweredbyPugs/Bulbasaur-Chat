@@ -51,7 +51,7 @@ Full MCP support enables:
 - Load "mental models" (extended context/personas) from markdown files
 - Separate configuration path from system prompts
 - Visual indicator showing active mental model
-- Commands: `/model` (load) and `/modelclear` (clear)
+- Commands: `/mental` (load) and `/mentalclear` (clear)
 
 ### Note Context Integration
 
@@ -164,8 +164,10 @@ StellaPlugin (main.ts)
 | `/history` | Show conversation history |
 | `/sys` | Load a system prompt from file |
 | `/sysclear` | Clear the current system prompt |
-| `/model` | Load a mental model from file |
-| `/modelclear` | Clear the current mental model |
+| `/mental` | Load a mental model from file |
+| `/mentalclear` | Clear the current mental model |
+| `/profile` | Switch model profile |
+| `/model` | Show the current model and profile |
 | `/mcp` | Open MCP server selector (tools, prompts, resources) |
 | `/mcpclear` | Clear active MCP connections |
 | `/clear` | Clear all context |

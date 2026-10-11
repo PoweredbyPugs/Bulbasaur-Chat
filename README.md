@@ -56,8 +56,8 @@ Define who the LLM is. Load persona and behavioral prompts from `.md` files in a
 Define *how* the LLM thinks. Mental models are reasoning frameworks injected with an explicit instruction for the LLM to actively apply them as an analytical lens — distinct from the system prompt's identity/persona.
 
 ```
-/model       → pick and load a mental model
-/modelclear  → remove the active mental model
+/mental       → pick and load a mental model
+/mentalclear  → remove the active mental model
 ```
 
 Both can be active simultaneously. The system prompt shapes *who* the LLM is; the mental model shapes *how* it thinks.
@@ -123,8 +123,10 @@ All commands are typed directly into the chat input. Type `/help` to see the ful
 |---------|-------------|
 | `/sys` | Load a system prompt from file |
 | `/sysclear` | Clear the active system prompt |
-| `/model` | Load a mental model from file |
-| `/modelclear` | Clear the active mental model |
+| `/mental` | Load a mental model from file |
+| `/mentalclear` | Clear the active mental model |
+| `/profile` | Switch model profile |
+| `/model` | Show the current model and profile |
 | `/mcp` | Open MCP server selector (tools, prompts, resources) |
 | `/mcpclear` | Disconnect all MCP servers |
 | `/clear` | Clear all context and start a fresh conversation |

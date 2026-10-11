@@ -22,3 +22,6 @@ export { ConversationHistoryModal } from './conversation-history';
 
 // Export suggest modals for file/folder pickers
 export { FolderSuggestModal, FileSuggestModal } from './suggest-modals';
+
+// Export profile selector modal
+export { ProfileSelectorModal, ProfileSelectCallbacks, describeProfileModel } from './profile-selector';

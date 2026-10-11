@@ -15,6 +15,7 @@ import {
     QuickAddCommand,
     ContextNote,
     CommandDefinition,
+    ModelProfile,
     DEFAULT_SETTINGS,
     MCP_SERVER_TEMPLATES
 } from './src/types';
@@ -32,7 +33,9 @@ import {
     createSystemPromptModal,
     createMentalModelModal,
     FolderSuggestModal,
-    FileSuggestModal
+    FileSuggestModal,
+    ProfileSelectorModal,
+    describeProfileModel
 } from './src/views';
 
 // Import providers
@@ -44,7 +47,9 @@ import {
     LLMProviderWithMCP,
     MCPContext,
     listOpenRouterModels,
-    listHermesModels
+    listHermesModels,
+    isNamedHermesAgent,
+    HERMES_FALLBACK_MODEL
 } from './src/providers';
 
 export default class StellaPlugin extends Plugin {
@@ -125,14 +130,7 @@ export default class StellaPlugin extends Plugin {
         this.addSettingTab(new StellaSettingTab(this.app, this));
 
         // Force update model info in existing chat views after a delay
-        setTimeout(() => {
-            this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE).forEach(leaf => {
-                const chatView = leaf.view as StellaChatView;
-                if (chatView && chatView.updateModelInfo) {
-                    chatView.updateModelInfo(chatView.modelInfoContainer);
-                }
-            });
-        }, 1000);
+        setTimeout(() => this.refreshModelInfo(), 1000);
 
         // Right-click → "Send selection to new Stella chat". Appears in the
         // editor context menu whenever there's non-empty selected text. Opens
@@ -190,7 +188,8 @@ export default class StellaPlugin extends Plugin {
     }
 
     async loadSettings() {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        const saved = await this.loadData();
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
 
         // Add safety check for missing background settings (backward compatibility)
         if (typeof this.settings.backgroundImage === 'undefined') {
@@ -215,6 +214,27 @@ export default class StellaPlugin extends Plugin {
             this.settings.conversations = [];
         }
 
+        // Profiles and per-provider model memory (copied so the shared
+        // defaults are never mutated).
+        this.settings.lastModels = { ...(this.settings.lastModels || {}) };
+        this.settings.profiles = Array.isArray(this.settings.profiles) ? [...this.settings.profiles] : [];
+        if (this.settings.model && !this.settings.lastModels[this.settings.provider]) {
+            this.settings.lastModels[this.settings.provider] = this.settings.model;
+        }
+        // First run with profiles: offer the two Hermes agents by name.
+        if ((!saved || !Array.isArray(saved.profiles)) && this.settings.hermesApiKey) {
+            this.settings.profiles.push(
+                { id: 'profile_robin', name: 'robin', provider: 'hermes', model: HERMES_FALLBACK_MODEL },
+                { id: 'profile_mei', name: 'mei', provider: 'hermes', model: 'mei' }
+            );
+            if (this.settings.provider === 'hermes' && !isNamedHermesAgent(this.settings.model)) {
+                this.settings.activeProfileId = 'profile_robin';
+            }
+        }
+        if (!this.settings.profiles.some(p => p.id === this.settings.activeProfileId)) {
+            this.settings.activeProfileId = null;
+        }
+
         this.logger.log(`Loaded settings - Conversations count: ${this.settings.conversations.length}`);
     }
 
@@ -235,6 +255,67 @@ export default class StellaPlugin extends Plugin {
 
         // Invalidate conversation metadata cache when settings change
         this.cacheManager.invalidateConversationData();
+    }
+
+    // Text of the active profile's prompt, refreshed before each request.
+    activeProfilePrompt = '';
+
+    getActiveProfile(): ModelProfile | null {
+        return this.settings.profiles.find(p => p.id === this.settings.activeProfileId) || null;
+    }
+
+    // The single place the active provider/model changes. Picking a profile
+    // passes its id; any other change leaves no profile active.
+    async applyModelSelection(provider: string, model: string, profileId: string | null = null) {
+        this.settings.provider = provider;
+        this.settings.model = model;
+        if (model) {
+            this.settings.lastModels[provider] = model;
+        }
+        this.settings.activeProfileId = profileId;
+        await this.saveSettings();
+        await this.refreshActiveProfilePrompt();
+        this.refreshModelInfo();
+    }
+
+    // A profile's prompt is its note, its typed text, or both (note first).
+    async refreshActiveProfilePrompt(): Promise<string> {
+        const profile = this.getActiveProfile();
+        const parts: string[] = [];
+        if (profile?.promptFile) {
+            const file = this.app.vault.getAbstractFileByPath(profile.promptFile);
+            if (file instanceof TFile) {
+                parts.push((await this.app.vault.cachedRead(file)).trim());
+            }
+        }
+        if (profile?.promptText && profile.promptText.trim()) {
+            parts.push(profile.promptText.trim());
+        }
+        this.activeProfilePrompt = parts.filter(Boolean).join('\n\n');
+        return this.activeProfilePrompt;
+    }
+
+    // Update the model label in every open chat view
+    refreshModelInfo() {
+        this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE).forEach(leaf => {
+            const chatView = leaf.view as StellaChatView;
+            if (chatView && chatView.updateModelInfo) {
+                chatView.updateModelInfo(chatView.modelInfoContainer);
+            }
+        });
+    }
+
+    // Open this plugin's settings tab, optionally scrolled to an element
+    openStellaSettings(scrollToSelector?: string) {
+        const setting = (this.app as any).setting;
+        setting.open();
+        setting.openTabById(this.manifest.id);
+        if (scrollToSelector) {
+            setTimeout(() => {
+                const target = setting.contentEl?.querySelector(scrollToSelector);
+                if (target) target.scrollIntoView({ block: 'start' });
+            }, 150);
+        }
     }
 
     async activateView() {
@@ -340,8 +421,10 @@ class StellaChatView extends ItemView {
         { command: '/help', description: 'Show all available commands' },
         { command: '/sys', description: 'Load system prompt from file' },
         { command: '/sysclear', description: 'Clear current system prompt' },
-        { command: '/model', description: 'Load mental model from file' },
-        { command: '/modelclear', description: 'Clear current mental model' },
+        { command: '/mental', description: 'Load mental model from file' },
+        { command: '/mentalclear', description: 'Clear current mental model' },
+        { command: '/profile', description: 'Switch model profile' },
+        { command: '/model', description: 'Show current model and profile' },
         { command: '/mcp', description: 'Connect to MCP server' },
         { command: '/mcpclear', description: 'Clear MCP connections' },
         { command: '/clear', description: 'Clear all context and start new conversation' },
@@ -473,7 +556,7 @@ class StellaChatView extends ItemView {
         // Mental model indicator (minimal, in input area)
         this.mentalModelIndicator = this.inputContainer.createEl('div', {
             cls: 'stella-mental-model-indicator',
-            attr: { 'title': 'Mental model loaded - use /modelclear to remove' }
+            attr: { 'title': 'Mental model loaded - use /mentalclear to remove' }
         });
         this.updateMentalModelIndicator();
 
@@ -519,14 +602,26 @@ class StellaChatView extends ItemView {
                     return;
                 }
 
-                if (message === '/model') {
+                if (message === '/mental') {
                     this.showMentalModelSelector();
                     this.chatInput.value = '';
                     return;
                 }
 
-                if (message === '/modelclear') {
+                if (message === '/mentalclear') {
                     this.unloadMentalModel();
+                    this.chatInput.value = '';
+                    return;
+                }
+
+                if (message === '/profile') {
+                    this.showProfileSelector();
+                    this.chatInput.value = '';
+                    return;
+                }
+
+                if (message === '/model') {
+                    this.showCurrentModel();
                     this.chatInput.value = '';
                     return;
                 }
@@ -607,16 +702,30 @@ class StellaChatView extends ItemView {
             return;
         }
 
-        // Check for /model command
-        if (message === '/model') {
+        // Check for /mental command
+        if (message === '/mental') {
             this.showMentalModelSelector();
             this.chatInput.value = '';
             return;
         }
 
-        // Check for /modelclear command
-        if (message === '/modelclear') {
+        // Check for /mentalclear command
+        if (message === '/mentalclear') {
             this.unloadMentalModel();
+            this.chatInput.value = '';
+            return;
+        }
+
+        // Check for /profile command
+        if (message === '/profile') {
+            this.showProfileSelector();
+            this.chatInput.value = '';
+            return;
+        }
+
+        // Check for /model command
+        if (message === '/model') {
+            this.showCurrentModel();
             this.chatInput.value = '';
             return;
         }
@@ -1515,6 +1624,8 @@ class StellaChatView extends ItemView {
             throw new Error(`Please configure ${providerName} in settings`);
         }
 
+        // The active profile's prompt may be a note; read it fresh.
+        await this.plugin.refreshActiveProfilePrompt();
         const context = this.buildProviderContext(message);
 
         // Special handling for Google with MCP
@@ -2937,6 +3048,37 @@ class StellaChatView extends ItemView {
         modal.open();
     }
 
+    showProfileSelector() {
+        let openingSettings = false;
+        const modal = new ProfileSelectorModal(
+            this.app,
+            this.plugin.settings.profiles,
+            this.plugin.settings.activeProfileId,
+            {
+                onSelect: async (profile: ModelProfile) => {
+                    await this.plugin.applyModelSelection(profile.provider, profile.model, profile.id);
+                },
+                onAdd: () => {
+                    openingSettings = true;
+                    this.plugin.openStellaSettings('.stella-profiles-heading');
+                },
+                onClose: () => {
+                    if (!openingSettings) {
+                        setTimeout(() => this.chatInput.focus(), 100);
+                    }
+                }
+            }
+        );
+        modal.open();
+    }
+
+    showCurrentModel() {
+        const { provider, model } = this.plugin.settings;
+        const profile = this.plugin.getActiveProfile();
+        const detail = describeProfileModel({ id: '', name: '', provider, model });
+        new Notice(profile ? `Profile: ${profile.name}\n${detail}` : `No profile\n${detail}`);
+    }
+
     async showSystemPromptSelector() {
         const promptsPath = this.plugin.settings.systemPromptsPath;
 
@@ -3134,7 +3276,7 @@ class StellaChatView extends ItemView {
         // Generate help text as a clean monospaced list
         const helpText = 'Available Commands:\n\n' +
             this.availableCommands
-                .map(cmd => `${cmd.command.padEnd(12)} - ${cmd.description}`)
+                .map(cmd => `${cmd.command.padEnd(14)} - ${cmd.description}`)
                 .join('\n');
 
         // Add message with monospace styling
@@ -3227,10 +3369,15 @@ class StellaChatView extends ItemView {
     }
 
     buildSystemMessage(): string {
-        let systemMessage = '';
+        // The active profile's prompt leads. It belongs to the profile, not
+        // the chat: never displayed, never saved to the conversation.
+        let systemMessage = this.plugin.activeProfilePrompt || '';
 
         // Add system prompt if available
         if (this.currentSystemPrompt) {
+            if (systemMessage) {
+                systemMessage += '\n\n';
+            }
             systemMessage += this.currentSystemPrompt;
         }
 
@@ -4767,10 +4914,7 @@ class StellaChatView extends ItemView {
     }
 
     openPluginSettings() {
-        // Open plugin settings via Obsidian's settings interface
-        const app = this.app as any;
-        app.setting.open();
-        app.setting.openTabById('stella');
+        this.plugin.openStellaSettings();
     }
 
     async onClose() {
@@ -4808,20 +4952,11 @@ class StellaSettingTab extends PluginSettingTab {
                 .addOption('lmstudio', 'LM Studio (Local)')
                 .addOption('custom', 'Custom API')
                 .addOption('openclaw', 'OpenClaw (Robin)')
-                .addOption('hermes', 'Hermes Agent (Nous)')
+                .addOption('hermes', 'Hermes')
                 .setValue(this.plugin.settings.provider)
                 .onChange(async (value) => {
-                    this.plugin.settings.provider = value;
-                    // Reset model when switching providers to avoid API errors
-                    this.plugin.settings.model = '';
-                    await this.plugin.saveSettings();
-                    // Update ALL chat views' model info immediately
-                    this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE).forEach(leaf => {
-                        const chatView = leaf.view as StellaChatView;
-                        if (chatView && chatView.updateModelInfo) {
-                            chatView.updateModelInfo(chatView.modelInfoContainer);
-                        }
-                    });
+                    // Bring back the model last used with this provider
+                    await this.plugin.applyModelSelection(value, this.plugin.settings.lastModels[value] || '');
                     this.display(); // Refresh to show provider-specific settings
                 }));
 
@@ -4988,41 +5123,64 @@ class StellaSettingTab extends PluginSettingTab {
                         });
                 });
 
+            const currentAgent = () => isNamedHermesAgent(this.plugin.settings.model) ? this.plugin.settings.model : '';
+            new Setting(containerEl)
+                .setName('Agent')
+                .setDesc('Which agent on the gateway to talk to. Leave empty for the default agent, or enter a name such as mei.')
+                .addText(text => text
+                    .setPlaceholder('default agent')
+                    .setValue(currentAgent())
+                    .onChange(async (value) => {
+                        await this.plugin.applyModelSelection('hermes', value.trim() || HERMES_FALLBACK_MODEL);
+                    }))
+                .addButton(button => button
+                    .setButtonText('Test')
+                    .onClick(async () => {
+                        const agent = currentAgent();
+                        const label = agent || 'The default agent';
+                        try {
+                            const ids = await listHermesModels(this.plugin.settings, agent);
+                            new Notice(ids.length > 0
+                                ? `${label} answered (${ids.join(', ')}).`
+                                : `${label} did not answer. Check the Hermes URL and key.`);
+                        } catch (error) {
+                            new Notice(`${label} could not be reached: ${error.message}`);
+                        }
+                    }));
+
             containerEl.createEl('p', {
                 text: '⚡ Hermes Agent (Nous Research) is a full agent, not a raw model — it brings its own model routing, tools, skills, and memory. Replies appear all at once when Hermes finishes, not word by word.',
                 cls: 'setting-item-description'
             });
         }
 
-        // Model selection - dynamically populated
-        this.modelSetting = new Setting(containerEl)
-            .setName('Model')
-            .setDesc('Select the model to use (fetched from API)')
-            .addButton(button => button
-                .setButtonText('Refresh Models')
-                .onClick(() => this.refreshModelDropdown()));
+        // Model selection - dynamically populated. Hermes picks an agent
+        // above instead of a model.
+        this.modelDropdown = null;
+        if (this.plugin.settings.provider !== 'hermes') {
+            this.modelSetting = new Setting(containerEl)
+                .setName('Model')
+                .setDesc('Select the model to use (fetched from API)')
+                .addButton(button => button
+                    .setButtonText('Refresh Models')
+                    .onClick(() => this.refreshModelDropdown()));
 
-        this.modelDropdown = this.modelSetting.addDropdown(dropdown => {
-            dropdown.setValue(this.plugin.settings.model);
-            dropdown.onChange(async (value) => {
-                this.plugin.settings.model = value;
-                await this.plugin.saveSettings();
-                // Update ALL chat views' model info immediately
-                this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE).forEach(leaf => {
-                    const chatView = leaf.view as StellaChatView;
-                    if (chatView && chatView.updateModelInfo) {
-                        chatView.updateModelInfo(chatView.modelInfoContainer);
-                    }
+            this.modelDropdown = this.modelSetting.addDropdown(dropdown => {
+                dropdown.setValue(this.plugin.settings.model);
+                dropdown.onChange(async (value) => {
+                    await this.plugin.applyModelSelection(this.plugin.settings.provider, value);
                 });
+                return dropdown;
             });
-            return dropdown;
-        });
 
-        // Load models on display
-        setTimeout(() => {
-            console.log('Settings tab displayed, refreshing model dropdown...');
-            this.refreshModelDropdown();
-        }, 100);
+            // Load models on display
+            setTimeout(() => {
+                console.log('Settings tab displayed, refreshing model dropdown...');
+                this.refreshModelDropdown();
+            }, 100);
+        }
+
+        this.renderProfileSettings(containerEl);
 
         new Setting(containerEl)
             .setName('Max Tokens')
@@ -5073,7 +5231,7 @@ class StellaSettingTab extends PluginSettingTab {
         // Mental models directory setting with browse button
         const mentalModelsPathSetting = new Setting(containerEl)
             .setName('Mental Models Directory')
-            .setDesc('Path to directory containing your mental model .md files (for /model command)');
+            .setDesc('Path to directory containing your mental model .md files (for /mental command)');
         let mentalModelsInput: any;
         mentalModelsPathSetting.addText(text => {
             mentalModelsInput = text;
@@ -5419,6 +5577,102 @@ class StellaSettingTab extends PluginSettingTab {
     modelSetting: Setting;
     modelDropdown: any;
 
+    // "Save as profile" plus the list of saved profiles
+    renderProfileSettings(containerEl: HTMLElement) {
+        const settings = this.plugin.settings;
+
+        containerEl.createEl('h3', { text: 'Profiles', cls: 'stella-profiles-heading' });
+
+        let newName = '';
+        new Setting(containerEl)
+            .setName('Save as profile')
+            .setDesc('Save the provider and model (or Hermes agent) selected above under a short name. Switch between profiles in chat with /profile.')
+            .addText(text => text
+                .setPlaceholder('Profile name')
+                .onChange(value => { newName = value.trim(); }))
+            .addButton(button => button
+                .setButtonText('Save')
+                .setCta()
+                .onClick(async () => {
+                    if (!newName) {
+                        new Notice('Give the profile a name first.');
+                        return;
+                    }
+                    const profile: ModelProfile = {
+                        id: `profile_${Date.now()}`,
+                        name: newName,
+                        provider: settings.provider,
+                        model: settings.model
+                    };
+                    settings.profiles.push(profile);
+                    await this.plugin.applyModelSelection(profile.provider, profile.model, profile.id);
+                    this.display();
+                }));
+
+        settings.profiles.forEach(profile => {
+            const block = containerEl.createDiv({ cls: 'stella-profile-settings' });
+            const isActive = profile.id === settings.activeProfileId;
+
+            new Setting(block)
+                .setName(describeProfileModel(profile) + (isActive ? ' (in use)' : ''))
+                .addText(text => text
+                    .setPlaceholder('Profile name')
+                    .setValue(profile.name)
+                    .onChange(async (value) => {
+                        profile.name = value.trim() || profile.name;
+                        await this.plugin.saveSettings();
+                    }))
+                .addExtraButton(button => button
+                    .setIcon('trash')
+                    .setTooltip('Delete profile')
+                    .onClick(async () => {
+                        settings.profiles = settings.profiles.filter(p => p.id !== profile.id);
+                        if (settings.activeProfileId === profile.id) {
+                            settings.activeProfileId = null;
+                        }
+                        await this.plugin.saveSettings();
+                        await this.plugin.refreshActiveProfilePrompt();
+                        this.display();
+                    }));
+
+            const promptSetting = new Setting(block)
+                .setName('Prompt')
+                .setDesc(profile.promptFile
+                    ? `Note: ${profile.promptFile}`
+                    : 'Optional. Sent with every message while this profile is in use. Choose a note, type text, or both.')
+                .addButton(button => button
+                    .setButtonText(profile.promptFile ? 'Change note' : 'Choose note')
+                    .onClick(() => {
+                        const folder = (settings.systemPromptsPath || '').replace(/\/+$/, '');
+                        const all = this.app.vault.getMarkdownFiles();
+                        const inFolder = folder ? all.filter(f => f.path.startsWith(folder + '/')) : [];
+                        new FileSuggestModal(this.app, inFolder.length > 0 ? inFolder : all, async (file) => {
+                            profile.promptFile = file.path;
+                            await this.plugin.saveSettings();
+                            this.display();
+                        }).open();
+                    }));
+            if (profile.promptFile) {
+                promptSetting.addExtraButton(button => button
+                    .setIcon('cross')
+                    .setTooltip('Remove note')
+                    .onClick(async () => {
+                        profile.promptFile = undefined;
+                        await this.plugin.saveSettings();
+                        this.display();
+                    }));
+            }
+            new Setting(block)
+                .addTextArea(text => text
+                    .setPlaceholder('Prompt text (optional)')
+                    .setValue(profile.promptText || '')
+                    .onChange(async (value) => {
+                        profile.promptText = value;
+                        await this.plugin.saveSettings();
+                    }));
+        });
+    }
+
     async fetchModelsForProvider(provider: string): Promise<string[]> {
         try {
             switch (provider) {
@@ -5441,16 +5695,10 @@ class StellaSettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                     }
                     return ['openclaw:main'];
-                case 'hermes': {
-                    // Hermes routes models itself and normally advertises a
-                    // single id; select it automatically.
-                    const hermesModels = await listHermesModels(this.plugin.settings);
-                    if (hermesModels.length > 0 && !hermesModels.includes(this.plugin.settings.model)) {
-                        this.plugin.settings.model = hermesModels[0];
-                        await this.plugin.saveSettings();
-                    }
-                    return hermesModels;
-                }
+                case 'hermes':
+                    // `model` names the agent for Hermes; never overwrite it
+                    // from the advertised list.
+                    return await listHermesModels(this.plugin.settings, this.plugin.settings.model);
                 default:
                     return [];
             }
@@ -5681,15 +5929,7 @@ class StellaSettingTab extends PluginSettingTab {
 
             dropdown.setValue(this.plugin.settings.model);
             dropdown.onChange(async (value) => {
-                this.plugin.settings.model = value;
-                await this.plugin.saveSettings();
-                // Update ALL chat views' model info immediately
-                this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE).forEach(leaf => {
-                    const chatView = leaf.view as StellaChatView;
-                    if (chatView && chatView.updateModelInfo) {
-                        chatView.updateModelInfo(chatView.modelInfoContainer);
-                    }
-                });
+                await this.plugin.applyModelSelection(this.plugin.settings.provider, value);
             });
             return dropdown;
         });
