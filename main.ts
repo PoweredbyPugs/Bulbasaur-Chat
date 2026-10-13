@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, WorkspaceLeaf, ItemView, Modal, MarkdownRenderer, Menu, Notice, TFile } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, WorkspaceLeaf, ItemView, Modal, MarkdownRenderer, Menu, Notice, Scope, TFile, setIcon } from 'obsidian';
 
 // Import types from modular structure
 import {
@@ -389,6 +389,20 @@ export default class StellaPlugin extends Plugin {
 // Chat View Constants
 const CHAT_VIEW_TYPE = "stella-mcp-chat-view";
 
+// Settle with `promise`, or reject as soon as `signal` aborts. Lets /stop end
+// the wait on work that can't be cancelled itself (requestUrl, MCP tools).
+function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const onAbort = () => reject(new DOMException('Stopped', 'AbortError'));
+        if (signal.aborted) {
+            onAbort();
+            return;
+        }
+        signal.addEventListener('abort', onAbort, { once: true });
+        promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+    });
+}
+
 // Chat View Class - Smart Chat inspired UI
 class StellaChatView extends ItemView {
     plugin: StellaPlugin;
@@ -420,6 +434,14 @@ class StellaChatView extends ItemView {
     activeMCPServers: Array<{name: string, tools: MCPTool[], prompts: MCPPrompt[], resources?: MCPResource[], highlightedTools?: string[]}> = [];
     mcpIndicator: HTMLElement;
     noteIndicator: HTMLElement;
+    // One controller per request in flight; /stop aborts them all
+    private activeRequests = new Set<AbortController>();
+    // Zen mode state (null when not in zen)
+    private zenOverlay: HTMLElement | null = null;
+    private zenStage: HTMLElement | null = null;
+    private zenHistoryList: HTMLElement | null = null;
+    private zenScope: Scope | null = null;
+    private zenHome: { parent: Node; next: Node | null } | null = null;
 
     // Available commands list (keep this updated when adding new commands)
     private readonly availableCommands = [
@@ -433,12 +455,14 @@ class StellaChatView extends ItemView {
         { command: '/mcp', description: 'Connect to MCP server' },
         { command: '/mcpclear', description: 'Clear MCP connections' },
         { command: '/clear', description: 'Clear all context and start new conversation' },
+        { command: '/stop', description: 'Stop the response in progress' },
         { command: '/new', description: 'Start new conversation' },
         { command: '/del', description: 'Delete current conversation' },
         { command: '/history', description: 'Show conversation history' },
         { command: '/name', description: 'Rename current conversation' },
         { command: '/settings', description: 'Open plugin settings' },
-        { command: '/hide', description: 'Toggle header visibility' }
+        { command: '/hide', description: 'Toggle header visibility' },
+        { command: '/zen', description: 'Toggle zen mode (focused chat over a dimmed Obsidian)' }
     ];
 
     constructor(leaf: WorkspaceLeaf, plugin: StellaPlugin) {
@@ -673,6 +697,18 @@ class StellaChatView extends ItemView {
                     return;
                 }
 
+                if (message === '/stop') {
+                    this.stopGeneration();
+                    this.chatInput.value = '';
+                    return;
+                }
+
+                if (message === '/zen') {
+                    this.toggleZen();
+                    this.chatInput.value = '';
+                    return;
+                }
+
                 if (message === '/help') {
                     this.showHelpMessage();
                     this.chatInput.value = '';
@@ -763,6 +799,12 @@ class StellaChatView extends ItemView {
             this.chatInput.value = '';
             return;
         }
+
+        // The request is built from the history as it stood before this
+        // message (the provider context appends the message itself), and the
+        // reply goes back to this conversation even if the user switches away.
+        const priorHistory = [...this.chatHistory];
+        const conversationId = this.currentConversationId;
 
         // Add user message to UI
         const userMessageEl = this.addMessage(message, 'user');
@@ -857,9 +899,12 @@ class StellaChatView extends ItemView {
             }
         }, 1000); // Update every second
 
+        const controller = new AbortController();
+        this.activeRequests.add(controller);
+
         try {
             // Use regular API call
-            const response = await this.callLLM(message);
+            const response = await abortable(this.callLLM(message, controller.signal, priorHistory), controller.signal);
 
             // Stop the loading animation and fade out
             clearInterval(loadingInterval);
@@ -876,8 +921,8 @@ class StellaChatView extends ItemView {
             // Small delay to show completed bar, then show response
             setTimeout(() => {
                 // Add actual response with token count if enabled
-                const responseEl = this.addMessage(response, 'assistant');
-                if (this.plugin.settings.showTokenCount) {
+                const responseEl = this.deliverReply(conversationId, response);
+                if (responseEl && this.plugin.settings.showTokenCount) {
                     const responseContentEl = responseEl.querySelector('.stella-message-content') as HTMLElement;
                     const finalTokenCounter = responseContentEl.createDiv('stella-token-counter stella-token-final');
                     finalTokenCounter.textContent = `${totalTokens} tokens`;
@@ -888,8 +933,49 @@ class StellaChatView extends ItemView {
             // Clear loading animation and show error
             clearInterval(loadingInterval);
             this.hideLoadingAnimation(loadingOverlay);
-            this.addMessage(`Error: ${error.message}`, 'error');
+            // Stopped by /stop: not an error
+            if (!controller.signal.aborted) {
+                if (conversationId === this.currentConversationId) {
+                    this.addMessage(`Error: ${error.message}`, 'error');
+                } else {
+                    new Notice(`Error: ${error.message}`);
+                }
+            }
+        } finally {
+            this.activeRequests.delete(controller);
         }
+    }
+
+    // Add a reply to the conversation it was asked in. If the user has moved
+    // to another conversation meanwhile, it is stored there without touching
+    // the one on screen; returns the message element only when it was shown.
+    private deliverReply(conversationId: string | null, content: string): HTMLElement | null {
+        if (conversationId === this.currentConversationId) {
+            return this.addMessage(content, 'assistant');
+        }
+
+        const conversation = this.plugin.settings.conversations.find(c => c.id === conversationId);
+        if (!conversation) return null; // deleted while the reply was pending
+
+        conversation.messages.push({ role: 'assistant', content, timestamp: Date.now() });
+        conversation.updatedAt = Date.now();
+        this.plugin.saveSettings();
+        this.renderZenHistory();
+        new Notice(`Reply added to "${conversation.title}"`);
+        return null;
+    }
+
+    // /stop: abort every request in flight
+    stopGeneration() {
+        if (this.activeRequests.size === 0) {
+            new Notice('Nothing to stop');
+            return;
+        }
+        for (const controller of this.activeRequests) {
+            controller.abort();
+        }
+        this.activeRequests.clear();
+        new Notice('Stopped');
     }
 
     hideLoadingAnimation(loadingOverlay: HTMLElement) {
@@ -1582,10 +1668,11 @@ class StellaChatView extends ItemView {
     }
 
     // Build provider context from current view state
-    private buildProviderContext(message: string): ProviderContext {
+    // `history` is the conversation before `message`; buildMessagesArray appends `message`
+    private buildProviderContext(message: string, signal?: AbortSignal, history = this.chatHistory): ProviderContext {
         const systemMessage = this.buildSystemMessage();
         const messages = buildMessagesArray(
-            this.chatHistory,
+            history,
             message,
             systemMessage || null
         );
@@ -1593,11 +1680,12 @@ class StellaChatView extends ItemView {
         return {
             settings: this.plugin.settings,
             messages,
-            systemMessage: systemMessage || null
+            systemMessage: systemMessage || null,
+            signal
         };
     }
 
-    async callLLM(message: string): Promise<string> {
+    async callLLM(message: string, signal?: AbortSignal, history = this.chatHistory): Promise<string> {
         const { provider: providerName } = this.plugin.settings;
         const provider = getProvider(providerName);
 
@@ -1611,7 +1699,7 @@ class StellaChatView extends ItemView {
 
         // The active profile's prompt may be a note; read it fresh.
         await this.plugin.refreshActiveProfilePrompt();
-        const context = this.buildProviderContext(message);
+        const context = this.buildProviderContext(message, signal, history);
 
         // Special handling for Google with MCP
         if (providerName === 'google' && this.activeMCPServers && this.activeMCPServers.length > 0) {
@@ -2701,6 +2789,7 @@ class StellaChatView extends ItemView {
         this.updateSystemPromptIndicator();
         // Update mental model indicator
         this.updateMentalModelIndicator();
+        this.renderZenHistory();
     }
 
     loadConversations() {
@@ -2914,6 +3003,7 @@ class StellaChatView extends ItemView {
         this.updateMentalModelIndicator();
         this.updateMCPIndicator();
         this.updateNoteIndicator();
+        this.renderZenHistory();
     }
 
     // Check if conversation title is a default date format (YYYY-MM-DD)
@@ -2959,6 +3049,7 @@ class StellaChatView extends ItemView {
             // Save immediately when user names a conversation (makes it worth saving)
             this.plugin.saveSettings();
             console.log(`Conversation named: ${conversation.title}`);
+            this.renderZenHistory();
         }
     }
 
@@ -3009,9 +3100,16 @@ class StellaChatView extends ItemView {
         // Save settings and invalidate cache
         await this.plugin.saveSettings();
         this.plugin.cache.invalidateConversationData();
+        this.renderZenHistory();
     }
 
     showChatHistory() {
+        // In zen the history lives in the column beside the chat
+        if (this.zenStage) {
+            this.toggleZenHistory();
+            return;
+        }
+
         // Save current conversation first
         this.saveCurrentConversation();
 
@@ -4901,7 +4999,156 @@ class StellaChatView extends ItemView {
         this.plugin.openStellaSettings();
     }
 
+    toggleZen() {
+        if (this.zenOverlay) {
+            this.exitZen();
+        } else {
+            this.enterZen();
+        }
+    }
+
+    // Zen mode: lift the chat out of its leaf into a centered panel over a
+    // dimmed, blurred Obsidian. The chat DOM is moved, not rebuilt, so the
+    // conversation, input and any request in flight carry over untouched.
+    enterZen() {
+        if (this.zenOverlay || !this.chatContainer?.parentNode) return;
+
+        const overlay = this.containerEl.ownerDocument.body.createDiv({ cls: 'stella-zen-overlay' });
+        const stage = overlay.createDiv({ cls: 'stella-zen-stage' });
+
+        const history = stage.createDiv({ cls: 'stella-zen-history' });
+        history.createDiv({ cls: 'stella-zen-history-title', text: 'Conversations' });
+        this.zenHistoryList = history.createDiv({ cls: 'stella-zen-history-list' });
+        this.zenHistoryList.addEventListener('keydown', (e) => this.handleZenHistoryKey(e));
+
+        const rail = stage.createDiv({ cls: 'stella-zen-rail' });
+        const historyBtn = rail.createEl('button', {
+            cls: 'stella-action-btn',
+            attr: { 'aria-label': 'Conversations' }
+        });
+        setIcon(historyBtn, 'history');
+        historyBtn.addEventListener('click', () => this.toggleZenHistory());
+        const exitBtn = rail.createEl('button', {
+            cls: 'stella-action-btn',
+            attr: { 'aria-label': 'Exit zen mode' }
+        });
+        setIcon(exitBtn, 'x');
+        exitBtn.addEventListener('click', () => this.exitZen());
+
+        const panel = stage.createDiv({ cls: 'stella-zen-panel' });
+
+        // Clicking the dimmed backdrop leaves zen
+        overlay.addEventListener('mousedown', (e) => {
+            if (e.target === overlay) this.exitZen();
+        });
+
+        // Escape leaves zen. Modals opened from the chat push their own scope
+        // on top, so their Escape still closes just the modal.
+        this.zenScope = new Scope(this.app.scope);
+        this.zenScope.register([], 'Escape', () => {
+            this.exitZen();
+            return false;
+        });
+        this.app.keymap.pushScope(this.zenScope);
+
+        this.zenOverlay = overlay;
+        this.zenStage = stage;
+        this.zenHome = { parent: this.chatContainer.parentNode, next: this.chatContainer.nextSibling };
+        this.moveChatContainer(panel, null);
+        this.chatInput.focus();
+    }
+
+    exitZen() {
+        if (!this.zenOverlay) return;
+
+        if (this.zenHome) {
+            this.moveChatContainer(this.zenHome.parent, this.zenHome.next);
+        }
+        if (this.zenScope) {
+            this.app.keymap.popScope(this.zenScope);
+        }
+        this.zenOverlay.remove();
+        this.zenOverlay = null;
+        this.zenStage = null;
+        this.zenHistoryList = null;
+        this.zenScope = null;
+        this.zenHome = null;
+        this.chatInput.focus();
+    }
+
+    // Re-parenting resets scroll, so carry the reading position across
+    private moveChatContainer(parent: Node, before: Node | null) {
+        const messages = this.messagesContainer;
+        const fromBottom = messages.scrollHeight - messages.scrollTop - messages.clientHeight;
+        parent.insertBefore(this.chatContainer, before);
+        messages.scrollTop = messages.scrollHeight - messages.clientHeight - fromBottom;
+    }
+
+    toggleZenHistory() {
+        if (!this.zenStage) return;
+        const open = this.zenStage.classList.toggle('stella-zen-history-open');
+        if (open) {
+            this.saveCurrentConversation();
+            this.renderZenHistory();
+            const current = this.zenHistoryList?.querySelector('.stella-conversation-current') as HTMLElement | null;
+            (current || this.zenHistoryList?.firstElementChild as HTMLElement | null)?.focus();
+        } else {
+            this.chatInput.focus();
+        }
+    }
+
+    // Rebuild the zen history column; a no-op unless it is showing
+    renderZenHistory() {
+        const list = this.zenHistoryList;
+        if (!list || !this.zenStage?.classList.contains('stella-zen-history-open')) return;
+
+        const focusedId = (list.querySelector('.stella-conversation-item:focus') as HTMLElement | null)?.dataset.conversationId;
+        list.empty();
+
+        for (const conversation of this.plugin.settings.conversations) {
+            const item = list.createDiv({
+                cls: 'stella-conversation-item',
+                attr: { tabindex: '0', 'data-conversation-id': conversation.id }
+            });
+            if (conversation.id === this.currentConversationId) {
+                item.addClass('stella-conversation-current');
+            }
+            item.createDiv({ cls: 'stella-conversation-title', text: conversation.title });
+            const lastUpdate = new Date(conversation.updatedAt).toLocaleDateString();
+            item.createDiv({
+                cls: 'stella-conversation-meta',
+                text: `${conversation.messages.length} messages • ${lastUpdate}`
+            });
+            item.addEventListener('click', () => {
+                if (conversation.id !== this.currentConversationId) {
+                    this.loadConversation(conversation.id);
+                }
+            });
+            if (conversation.id === focusedId) {
+                item.focus();
+            }
+        }
+    }
+
+    // Arrow keys walk the zen history list, Enter loads the focused one
+    private handleZenHistoryKey(e: KeyboardEvent) {
+        const item = (e.target as HTMLElement).closest('.stella-conversation-item') as HTMLElement | null;
+        if (!item) return;
+
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            const next = (e.key === 'ArrowDown' ? item.nextElementSibling : item.previousElementSibling) as HTMLElement | null;
+            next?.focus();
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            item.click();
+        }
+    }
+
     async onClose() {
+        // Put the chat back in its leaf before the view goes away
+        this.exitZen();
+
         // Cleanup async logger
         if (this.logger) {
             this.logger.destroy();

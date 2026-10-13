@@ -343,16 +343,25 @@ export class OpenClawProvider implements LLMProvider {
             }, 300000); // 5 minutes
         });
 
-        // Send the message
-        await this.request('chat.send', {
-            sessionKey: this.sessionKey,
-            message: lastMessage.content,
-            deliver: false,
-            idempotencyKey
-        });
+        // /stop: ask the gateway to cancel the run; it answers with an
+        // "aborted" chat event, which resolves runDone above.
+        const onAbort = () => { this.abort(settings).catch(() => {}); };
+        context.signal?.addEventListener('abort', onAbort, { once: true });
 
-        // Wait for the run to complete (resolved by chat event listener)
-        await runDone;
+        try {
+            // Send the message
+            await this.request('chat.send', {
+                sessionKey: this.sessionKey,
+                message: lastMessage.content,
+                deliver: false,
+                idempotencyKey
+            });
+
+            // Wait for the run to complete (resolved by chat event listener)
+            await runDone;
+        } finally {
+            context.signal?.removeEventListener('abort', onAbort);
+        }
         await callbacks.onComplete();
     }
 

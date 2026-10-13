@@ -1525,3 +1525,131 @@ button.stella-profile-add:hover {
 
 
 
+
+/* Zen mode (/zen): the chat lifted into a panel over a dimmed, blurred Obsidian */
+.stella-zen-overlay {
+    position: fixed;
+    inset: 0;
+    /* Just under modals, so /sys, /profile and friends still open on top */
+    z-index: calc(var(--layer-modal) - 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    animation: stella-zen-fade 180ms ease-out;
+}
+
+@keyframes stella-zen-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.stella-zen-stage {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    height: min(88vh, 960px);
+    max-width: 96vw;
+}
+
+.stella-zen-panel {
+    width: min(820px, 96vw);
+    flex-shrink: 1;
+    min-width: 0;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 12px;
+    background: var(--background-primary);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+}
+
+.stella-zen-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.stella-zen-history {
+    display: flex;
+    flex-direction: column;
+    width: 0;
+    margin-right: -12px; /* swallow the stage gap while closed */
+    opacity: 0;
+    overflow: hidden;
+    border-radius: 12px;
+    background: var(--background-secondary);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+    transition: width 200ms ease, opacity 200ms ease, margin-right 200ms ease;
+}
+
+.stella-zen-history-open .stella-zen-history {
+    width: 280px;
+    margin-right: 0;
+    opacity: 1;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.stella-zen-history-title {
+    padding: 14px 16px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.stella-zen-history-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 10px 10px;
+    /* Fixed inner width so rows don't reflow while the column slides */
+    width: 280px;
+    box-sizing: border-box;
+}
+
+.stella-zen-history-list .stella-conversation-item:focus-visible {
+    outline: 2px solid var(--interactive-accent);
+    outline-offset: 1px;
+}
+
+.stella-zen-history-open .stella-zen-rail .stella-action-btn:first-child {
+    border-color: var(--interactive-accent);
+    color: var(--text-normal);
+}
+
+/* Narrow windows and phones: fill the screen, history slides over the chat */
+@media (max-width: 700px) {
+    .stella-zen-stage {
+        position: relative;
+        width: 100vw;
+        height: 100%;
+        max-width: none;
+        gap: 0;
+    }
+
+    .stella-zen-panel {
+        width: 100%;
+        border: none;
+        border-radius: 0;
+    }
+
+    .stella-zen-rail {
+        position: absolute;
+        top: 52px;
+        right: 8px;
+        z-index: 30;
+    }
+
+    .stella-zen-history {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 20;
+        margin-right: 0;
+        border-radius: 0;
+    }
+}

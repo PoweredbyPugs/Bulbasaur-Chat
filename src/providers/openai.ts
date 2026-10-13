@@ -17,6 +17,7 @@ export class OpenAIProvider implements LLMProvider {
 
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
+            signal: context.signal,
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${settings.openaiApiKey}`
@@ -46,6 +47,7 @@ export class OpenAIProvider implements LLMProvider {
 
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
+            signal: context.signal,
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${settings.openaiApiKey}`

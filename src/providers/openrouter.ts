@@ -74,7 +74,7 @@ export class OpenRouterProvider implements LLMProvider {
 
     async call(context: ProviderContext): Promise<string> {
         const { settings, messages } = context;
-        const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, this.buildRequest(settings, messages, false));
+        const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, { ...this.buildRequest(settings, messages, false), signal: context.signal });
         if (!response.ok) throw await this.errorFrom(response);
 
         const data = await response.json();
@@ -83,7 +83,7 @@ export class OpenRouterProvider implements LLMProvider {
 
     async stream(context: ProviderContext, callbacks: StreamCallbacks): Promise<void> {
         const { settings, messages } = context;
-        const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, this.buildRequest(settings, messages, true));
+        const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, { ...this.buildRequest(settings, messages, true), signal: context.signal });
         if (!response.ok) throw await this.errorFrom(response);
 
         const reader = response.body!.getReader();

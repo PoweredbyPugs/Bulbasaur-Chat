@@ -11,6 +11,8 @@ export interface ProviderContext {
     settings: StellaSettings;
     messages: ProviderMessage[];
     systemMessage: string | null;
+    // Aborted by /stop; providers hand it to fetch or cancel their own run
+    signal?: AbortSignal;
 }
 
 // Streaming callbacks

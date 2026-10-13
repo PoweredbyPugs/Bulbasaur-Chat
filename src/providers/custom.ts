@@ -25,6 +25,7 @@ export class CustomAPIProvider implements LLMProvider {
 
         const response = await fetch(settings.customApiUrl, {
             method: 'POST',
+            signal: context.signal,
             headers: headers,
             body: JSON.stringify({
                 model: settings.model,

@@ -92,6 +92,7 @@ export class GoogleProvider implements LLMProviderWithMCP {
             `https://generativelanguage.googleapis.com/v1beta/models/${settings.model}:generateContent?key=${settings.googleApiKey}`,
             {
                 method: 'POST',
+                signal: context.signal,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestBody)
             }
@@ -138,6 +139,7 @@ export class GoogleProvider implements LLMProviderWithMCP {
                     `https://generativelanguage.googleapis.com/v1beta/models/${settings.model}:generateContent?key=${settings.googleApiKey}`,
                     {
                         method: 'POST',
+                        signal: context.signal,
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ ...requestBody, contents: followUpContents })
                     }
@@ -194,6 +196,7 @@ export class GoogleProvider implements LLMProviderWithMCP {
             `https://generativelanguage.googleapis.com/v1beta/models/${settings.model}:streamGenerateContent?key=${settings.googleApiKey}`,
             {
                 method: 'POST',
+                signal: context.signal,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestBody)
             }

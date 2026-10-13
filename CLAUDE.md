@@ -188,6 +188,7 @@ All commands are accessible via the chat input. Type `/help` to see this list in
 - **`/mcp`** - Connect to MCP server
 - **`/mcpclear`** - Clear MCP connections
 - **`/clear`** - Clear all context and start new conversation
+- **`/stop`** - Stop the response in progress
 
 ### Conversation Management
 - **`/new`** - Start new conversation
@@ -198,10 +199,16 @@ All commands are accessible via the chat input. Type `/help` to see this list in
 ### Interface
 - **`/settings`** - Open plugin settings
 - **`/hide`** - Toggle header visibility
+- **`/zen`** - Toggle zen mode (chat in a centered panel over a dimmed, blurred Obsidian)
 
 ### Special Input
 - **`@`** - Add note context (opens quick switcher)
 - **`[[Note]]`** - Interactive wiki links (click to add context, Ctrl+click to open)
+
+## Stop and Zen
+
+- **`/stop`**: each `sendMessage` registers an `AbortController` in `activeRequests`; `stopGeneration()` aborts them all. The signal rides on `ProviderContext.signal` — fetch providers pass it to `fetch`, OpenClaw sends `chat.abort`. The view also wraps the call in `abortable()`, so work that can't be cancelled (Hermes via `requestUrl`, MCP tools) is abandoned at once and its late result dropped; a Hermes run still finishes on the gateway.
+- **`/zen`**: `enterZen()` *moves* the chat container (`.view-content`) into `.stella-zen-overlay` on `document.body` and `exitZen()` moves it back — nothing is rebuilt, so state and in-flight requests carry over. The overlay sits one below `--layer-modal` so the chat's own modals open above it. Escape is a pushed `Scope`. In zen, `showChatHistory()` toggles the history column (`renderZenHistory`) instead of opening `ConversationHistoryModal`.
 
 ## Provider System
 

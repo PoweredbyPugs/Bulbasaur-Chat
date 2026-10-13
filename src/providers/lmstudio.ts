@@ -13,6 +13,7 @@ export class LMStudioProvider implements LLMProvider {
 
         const response = await fetch(`${settings.lmStudioBaseUrl}/v1/chat/completions`, {
             method: 'POST',
+            signal: context.signal,
             headers: {
                 'Content-Type': 'application/json',
             },
@@ -38,6 +39,7 @@ export class LMStudioProvider implements LLMProvider {
 
         const response = await fetch(`${settings.lmStudioBaseUrl}/v1/chat/completions`, {
             method: 'POST',
+            signal: context.signal,
             headers: {
                 'Content-Type': 'application/json',
             },

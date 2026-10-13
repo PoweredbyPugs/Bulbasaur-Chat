@@ -33,6 +33,7 @@ export class OllamaProvider implements LLMProvider {
 
         const response = await fetch(`${settings.ollamaBaseUrl}/api/generate`, {
             method: 'POST',
+            signal: context.signal,
             headers: {
                 'Content-Type': 'application/json',
             },
