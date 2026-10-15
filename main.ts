@@ -1701,8 +1701,8 @@ class StellaChatView extends ItemView {
         await this.plugin.refreshActiveProfilePrompt();
         const context = this.buildProviderContext(message, signal, history);
 
-        // Special handling for Google with MCP
-        if (providerName === 'google' && this.activeMCPServers && this.activeMCPServers.length > 0) {
+        // Providers with native tool calling (Google, OpenRouter) get the MCP tools
+        if (this.activeMCPServers && this.activeMCPServers.length > 0) {
             const mcpProvider = provider as LLMProviderWithMCP;
             if (mcpProvider.callWithMCP) {
                 const mcpContext = this.buildMCPContext();
@@ -1766,6 +1766,12 @@ class StellaChatView extends ItemView {
         // Google streaming is disabled, will throw and fall back to regular API
         if (providerName === 'google') {
             throw new Error('Google streaming temporarily disabled');
+        }
+
+        const mcpProvider = provider as LLMProviderWithMCP;
+        if (mcpProvider.streamWithMCP && this.activeMCPServers && this.activeMCPServers.length > 0) {
+            await mcpProvider.streamWithMCP(context, callbacks, this.buildMCPContext());
+            return;
         }
 
         await provider.stream(context, callbacks);
@@ -3510,7 +3516,7 @@ class StellaChatView extends ItemView {
                     systemMessage += '\n\n';
                 }
 
-                systemMessage += 'You have access to the following MCP (Model Context Protocol) tools through Google\'s function calling system:\n\n';
+                systemMessage += 'You have access to the following MCP (Model Context Protocol) tools through function calling:\n\n';
 
                 let totalToolCount = 0;
                 for (const serverInfo of this.activeMCPServers) {
@@ -3592,7 +3598,7 @@ class StellaChatView extends ItemView {
                     systemMessage += '\n**DISAMBIGUATION**: If the user\'s request could apply to multiple tools, ask for clarification about which specific tool or action they want before proceeding.\n';
                 }
 
-                systemMessage += '\nIMPORTANT: You can call these functions directly using Google\'s function calling capability. When you need to use a tool, call the corresponding function and I will automatically execute it and return the results to you. Do not ask the user to run tools - call them directly when needed.';
+                systemMessage += '\nIMPORTANT: You can call these functions directly using function calling. When you need to use a tool, call the corresponding function and I will automatically execute it and return the results to you. Do not ask the user to run tools - call them directly when needed.';
 
                 console.log('buildSystemMessage: Final system message with MCP info:', systemMessage);
             }

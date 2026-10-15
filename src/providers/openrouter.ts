@@ -1,6 +1,6 @@
 import { requestUrl } from 'obsidian';
 import { StellaSettings } from '../types';
-import { LLMProvider, ProviderContext, StreamCallbacks } from './types';
+import { LLMProviderWithMCP, MCPContext, ProviderContext, StreamCallbacks } from './types';
 
 /**
  * OpenRouter provider — one API key, hundreds of models from many vendors,
@@ -32,7 +32,42 @@ export async function listOpenRouterModels(): Promise<string[]> {
     return ids.sort((a, b) => a.localeCompare(b));
 }
 
-export class OpenRouterProvider implements LLMProvider {
+// Tool-call round trips allowed per reply before the model must answer.
+const MAX_TOOL_ROUNDS = 8;
+
+/**
+ * MCP tools as OpenAI-style function definitions. Function names must match
+ * ^[a-zA-Z0-9_-]{1,64}$, but ours are `${server}_${tool}` and server names
+ * have spaces ("Stella Astrology Server"), so each gets a safe name and
+ * `originalNames` maps it back for executeTool.
+ */
+function buildOpenAITools(mcpContext: MCPContext): { tools: any[]; originalNames: Map<string, string> } {
+    const tools: any[] = [];
+    const originalNames = new Map<string, string>();
+    for (const server of mcpContext.servers) {
+        for (const tool of server.tools) {
+            const original = `${server.name}_${tool.name}`;
+            let name = original.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+            for (let i = 2; originalNames.has(name); i++) {
+                name = `${name.slice(0, 60)}_${i}`;
+            }
+            originalNames.set(name, original);
+
+            const { $schema, ...parameters } = tool.inputSchema || {};
+            tools.push({
+                type: 'function',
+                function: {
+                    name,
+                    description: tool.description || `Execute ${tool.name} from ${server.name}`,
+                    parameters: parameters.type ? parameters : { type: 'object', properties: {} },
+                },
+            });
+        }
+    }
+    return { tools, originalNames };
+}
+
+export class OpenRouterProvider implements LLMProviderWithMCP {
     name = 'openrouter';
 
     isConfigured(settings: StellaSettings): boolean {
@@ -79,6 +114,64 @@ export class OpenRouterProvider implements LLMProvider {
 
         const data = await response.json();
         return data.choices?.[0]?.message?.content || '';
+    }
+
+    /**
+     * Non-streaming call with MCP tools offered as OpenAI-style `tools`.
+     * Loops: whenever the model answers with `tool_calls`, run each one,
+     * hand the results back as `tool` messages, and ask again — until it
+     * answers in plain text or MAX_TOOL_ROUNDS is reached.
+     *
+     * Without `tools` in the request, models that know tools only from the
+     * system prompt (e.g. DeepSeek) write their native call markup into the
+     * reply as text instead of calling anything.
+     */
+    async callWithMCP(context: ProviderContext, mcpContext: MCPContext): Promise<string> {
+        const { settings, signal } = context;
+        const { tools, originalNames } = buildOpenAITools(mcpContext);
+        if (tools.length === 0) return this.call(context);
+
+        const messages: any[] = [...context.messages];
+        const request = (withTools: boolean) => {
+            const init = this.buildRequest(settings, messages, false);
+            const body = JSON.parse(init.body as string);
+            if (withTools) body.tools = tools;
+            return fetch(`${OPENROUTER_BASE}/chat/completions`, { ...init, body: JSON.stringify(body), signal });
+        };
+
+        for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+            // The last round withholds tools so the model has to answer.
+            const response = await request(round < MAX_TOOL_ROUNDS);
+            if (!response.ok) throw await this.errorFrom(response);
+
+            const data = await response.json();
+            const message = data.choices?.[0]?.message;
+            const toolCalls: any[] = message?.tool_calls || [];
+            if (toolCalls.length === 0) return message?.content || '';
+
+            // Send the assistant turn back as-is: reasoning models need their
+            // reasoning fields echoed alongside the tool calls.
+            messages.push(message);
+            for (const call of toolCalls) {
+                const name = call.function?.name || '';
+                let content: string;
+                try {
+                    const args = call.function?.arguments ? JSON.parse(call.function.arguments) : {};
+                    const result = await mcpContext.executeTool(originalNames.get(name) || name, args);
+                    content = typeof result === 'string' ? result : JSON.stringify(result);
+                } catch (error: any) {
+                    content = `Error: ${error?.message || error}`;
+                }
+                messages.push({ role: 'tool', tool_call_id: call.id, content });
+            }
+        }
+        return '';
+    }
+
+    // Tool calls run non-streamed; the finished reply arrives in one piece.
+    async streamWithMCP(context: ProviderContext, callbacks: StreamCallbacks, mcpContext: MCPContext): Promise<void> {
+        callbacks.onContent(await this.callWithMCP(context, mcpContext));
+        await callbacks.onComplete();
     }
 
     async stream(context: ProviderContext, callbacks: StreamCallbacks): Promise<void> {

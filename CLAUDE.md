@@ -240,7 +240,7 @@ const response = await provider.chat(context);
 | LM Studio | Any GGUF model | Yes | Via tools |
 | Custom | OpenAI-compatible | Varies | Via tools |
 | OpenClaw | Robin (via Gateway) | Yes | Native (WebSocket) |
-| OpenRouter | Any OpenRouter model | No | — |
+| OpenRouter | Any OpenRouter model | No | Native (`tools`, non-streamed tool loop) |
 | Hermes | Hermes Agent (gateway API server, port 8642, `API_SERVER_KEY`) | Yes | Agent's own tools |
 
 **Hermes:** use the gateway's OpenAI-compatible API server, never the 9119 dashboard — the dashboard's WebSocket enforces Host, per-launch token and Origin checks that an outside app can't pass. `requestUrl` sidesteps the API server's CORS allowlist at the cost of streaming.
