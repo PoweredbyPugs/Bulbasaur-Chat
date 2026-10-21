@@ -6455,7 +6455,8 @@ class StellaSettingTab extends PluginSettingTab {
                     newServer.env = envVars;
                 }
             } else {
-                const endpoint = endpointInput.value.trim();
+                // Strip quotes that come along when the URL is pasted from a snippet.
+                const endpoint = endpointInput.value.trim().replace(/^["']+|["']+$/g, '');
                 if (!endpoint) {
                     new Notice('WebSocket endpoint is required');
                     return;

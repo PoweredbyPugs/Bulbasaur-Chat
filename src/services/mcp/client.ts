@@ -100,13 +100,9 @@ export class MCPClientManager {
         }
 
         try {
+            // Pasted endpoints often arrive wrapped in quotes; tolerate that.
+            server.endpoint = String(server.endpoint).trim().replace(/^["']+|["']+$/g, '');
             const ws = new WebSocket(server.endpoint);
-
-            ws.onopen = () => {
-                this.logger.log(`Connected to MCP server: ${server.name}`);
-                server.connected = true;
-                this.initializeServerCapabilities(server.id);
-            };
 
             ws.onmessage = (event) => {
                 this.handleMessage(server.id, JSON.parse(event.data));
@@ -117,15 +113,29 @@ export class MCPClientManager {
                 server.connected = false;
             };
 
+            // Wait for the socket to actually open (or fail) before reporting connected,
+            // mirroring connectStdio, so tool discovery has finished when we return.
+            await new Promise<void>((resolve, reject) => {
+                ws.onopen = () => resolve();
+                ws.onerror = (error) => {
+                    this.logger.error(`WebSocket error for server ${server.name}:`, error);
+                    reject(new Error(`WebSocket connection failed for ${server.name}`));
+                };
+            });
+
             ws.onerror = (error) => {
                 this.logger.error(`WebSocket error for server ${server.name}:`, error);
                 server.connected = false;
             };
 
             this.connections.set(server.id, ws);
+            server.connected = true;
+            this.logger.log(`Connected to MCP server: ${server.name}`);
+            await this.initializeServerCapabilities(server.id);
             return true;
         } catch (error) {
             this.logger.error(`HTTP connection failed for server ${server.id}:`, error);
+            server.connected = false;
             return false;
         }
     }
