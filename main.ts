@@ -341,6 +341,18 @@ export default class StellaPlugin extends Plugin {
      * — the user usually wants to add framing ("summarize this", "explain", etc.)
      * before hitting return. */
     async sendSelectionToNewChat(selection: string) {
+        await this.openChatWith({ text: selection, keepServers: true });
+    }
+
+    /** Public entry point for other plugins (e.g. Periodic Ritual's Bulbasaur
+     * button): `app.plugins.plugins["bulbasaur-chat"].openChatWith({...})`.
+     *  - text:       pre-filled into the input (not sent unless `send`)
+     *  - mcpServers: server names to switch on for the new chat (case-insensitive);
+     *                the chat starts with only these active
+     *  - keepServers: keep whatever servers the previous chat had on instead
+     * Returns false if the view could not be opened. */
+    async openChatWith(opts: { text?: string; mcpServers?: string[]; send?: boolean; keepServers?: boolean } = {}): Promise<boolean> {
+        const { text = '', mcpServers = [], send = false, keepServers = false } = opts;
         // Get or create the chat leaf without detaching existing leaves so any
         // open conversation isn't yanked out from under the user. Mirrors the
         // four-winds:process-seed pattern above.
@@ -354,35 +366,64 @@ export default class StellaPlugin extends Plugin {
         }
         if (leaves.length === 0) {
             new Notice('Could not open the Bulbasaur Chat view.');
-            return;
+            return false;
         }
         this.app.workspace.revealLeaf(leaves[0]);
 
         const chatView = leaves[0].view as StellaChatView;
         if (!chatView || typeof chatView.startNewConversation !== 'function') {
             new Notice('Bulbasaur Chat is not ready yet — try again in a moment.');
-            return;
+            return false;
         }
         chatView.startNewConversation();
+
+        if (!keepServers) {
+            chatView.activeMCPServers = [];
+            chatView.updateMCPIndicator();
+        }
+        if (mcpServers.length) {
+            const wanted = mcpServers.map(n => n.toLowerCase());
+            const servers = Array.from(this.mcpClientManager?.getServers().values() || []);
+            for (const name of wanted) {
+                const server = servers.find(sv => sv.name.toLowerCase() === name);
+                if (server) chatView.activateMCPServer(server);
+                else new Notice(`Bulbasaur Chat: MCP server "${name}" is not configured.`);
+            }
+        }
 
         // Pre-fill the input. The StellaChatView constructor wires the
         // textarea as `chatInput`; it may not be attached on the very first
         // call after view creation, so retry briefly if needed.
         const fill = () => {
-            if (chatView.chatInput) {
-                chatView.chatInput.value = selection;
-                chatView.chatInput.focus();
-                // Move caret to end so a follow-up keystroke appends rather
-                // than overwriting selected text.
-                const len = chatView.chatInput.value.length;
-                chatView.chatInput.setSelectionRange(len, len);
-                return true;
-            }
-            return false;
+            if (!chatView.chatInput) return false;
+            chatView.chatInput.value = text;
+            chatView.chatInput.focus();
+            // Move caret to end so a follow-up keystroke appends rather
+            // than overwriting selected text.
+            const len = chatView.chatInput.value.length;
+            chatView.chatInput.setSelectionRange(len, len);
+            if (send && text) chatView.sendMessage();
+            return true;
         };
         if (!fill()) {
-            setTimeout(() => { fill(); }, 150);
+            await new Promise(r => setTimeout(r, 150));
+            fill();
         }
+        return true;
+    }
+
+    /** Call an MCP tool on a configured server by name, through the existing
+     * connection. Returns the tool result's text content, joined. Throws if
+     * the server is unknown or not connected. Public for other plugins. */
+    async callTool(serverName: string, tool: string, args: Record<string, unknown> = {}): Promise<string> {
+        const manager = this.mcpClientManager;
+        const server = Array.from(manager?.getServers().values() || [])
+            .find(sv => sv.name.toLowerCase() === serverName.toLowerCase());
+        if (!manager || !server) throw new Error(`MCP server "${serverName}" is not configured`);
+        if (!server.connected) throw new Error(`MCP server "${serverName}" is not connected`);
+        const result = await manager.executeTool(server.id, tool, args);
+        if (result?.isError) throw new Error((result.content || []).map((c: any) => c.text || '').join('\n') || `${tool} failed`);
+        return (result?.content || []).map((c: any) => c.text || '').join('\n');
     }
 }
 
