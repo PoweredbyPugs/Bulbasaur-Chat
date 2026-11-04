@@ -350,9 +350,11 @@ export default class StellaPlugin extends Plugin {
      *  - mcpServers: server names to switch on for the new chat (case-insensitive);
      *                the chat starts with only these active
      *  - keepServers: keep whatever servers the previous chat had on instead
+     *  - context:    [{name, content}] loaded as the new chat's context notes
+     *                (system prompt, note icon) instead of anything in the input
      * Returns false if the view could not be opened. */
-    async openChatWith(opts: { text?: string; mcpServers?: string[]; send?: boolean; keepServers?: boolean } = {}): Promise<boolean> {
-        const { text = '', mcpServers = [], send = false, keepServers = false } = opts;
+    async openChatWith(opts: { text?: string; mcpServers?: string[]; send?: boolean; keepServers?: boolean; context?: Array<{ name: string; content: string }> } = {}): Promise<boolean> {
+        const { text = '', mcpServers = [], send = false, keepServers = false, context } = opts;
         // Get or create the chat leaf without detaching existing leaves so any
         // open conversation isn't yanked out from under the user. Mirrors the
         // four-winds:process-seed pattern above.
@@ -376,6 +378,11 @@ export default class StellaPlugin extends Plugin {
             return false;
         }
         chatView.startNewConversation();
+
+        if (context) {
+            chatView.contextNotes = context.map(c => ({ name: c.name, content: c.content }));
+            chatView.updateContextIndicator();
+        }
 
         if (!keepServers) {
             chatView.activeMCPServers = [];
